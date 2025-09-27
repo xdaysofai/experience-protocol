@@ -37,7 +37,7 @@ export default function HomePage() {
                 🔍 Look for Experience
               </Button>
             </Link>
-            <Link href="/creator">
+            <Link href="/create">
               <Button variant="secondary" size="lg" className="w-full sm:w-auto">
                 🎨 Create Experience
               </Button>
@@ -205,7 +205,7 @@ export default function HomePage() {
                   🔍 Look for Experience
                 </Button>
               </Link>
-              <Link href="/creator">
+              <Link href="/create">
                 <Button variant="secondary" size="lg" className="w-full sm:w-auto">
                   🎨 Create Experience
                 </Button>
