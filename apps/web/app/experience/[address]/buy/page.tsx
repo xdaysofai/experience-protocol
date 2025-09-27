@@ -49,8 +49,19 @@ export default function BuyPage({ params }: { params: { address: `0x${string}` }
 
   useEffect(() => {
     if (typeof window !== "undefined" && (window as any).ethereum) {
+      console.log("Ethereum provider detected on page load");
+      console.log("Provider details:", {
+        isMetaMask: (window as any).ethereum.isMetaMask,
+        isConnected: (window as any).ethereum.isConnected?.(),
+        chainId: (window as any).ethereum.chainId,
+        selectedAddress: (window as any).ethereum.selectedAddress,
+        providers: (window as any).ethereum.providers?.length || 'single provider'
+      });
+      
       const w = createWalletClient({ chain, transport: custom((window as any).ethereum) });
       setWallet(w);
+    } else {
+      console.log("No Ethereum provider found on page load");
     }
   }, []);
 
@@ -62,46 +73,97 @@ export default function BuyPage({ params }: { params: { address: `0x${string}` }
       return setError("Browser environment not detected.");
     }
 
-    if (!(window as any).ethereum) {
-      console.log("MetaMask not found");
+    // Check for multiple wallet providers
+    const ethereum = (window as any).ethereum;
+    if (!ethereum) {
+      console.log("No Ethereum provider found");
       return setError("MetaMask not detected. Please install MetaMask browser extension.");
     }
 
     try {
       setLoading("Connecting wallet...");
       setError("");
-      console.log("Requesting account access...");
+      setSuccess("");
       
-      // Request account access
-      const accounts = await (window as any).ethereum.request({ 
-        method: "eth_requestAccounts" 
-      });
-      
-      console.log("Accounts received:", accounts);
-      
-      if (accounts.length === 0) {
-        throw new Error("No accounts found. Please unlock MetaMask.");
-      }
+      // If there are multiple wallets, try to select MetaMask specifically
+      if (ethereum.providers?.length) {
+        console.log("Multiple providers detected, selecting MetaMask...");
+        const metamaskProvider = ethereum.providers.find((provider: any) => provider.isMetaMask);
+        if (metamaskProvider) {
+          // Use MetaMask specifically
+          const accounts = await metamaskProvider.request({ 
+            method: "eth_requestAccounts" 
+          });
+          
+          console.log("MetaMask accounts received:", accounts);
+          
+          if (accounts.length === 0) {
+            throw new Error("No accounts found. Please unlock MetaMask.");
+          }
 
-      const account = accounts[0];
-      setAccount(account);
-      console.log("Account set:", account);
-      
-      // Create wallet client after successful connection
-      if (!wallet) {
+          const account = accounts[0];
+          setAccount(account);
+          console.log("Account set:", account);
+          
+          // Create wallet client with MetaMask provider
+          const w = createWalletClient({ 
+            chain, 
+            transport: custom(metamaskProvider) 
+          });
+          setWallet(w);
+          console.log("Wallet client created with MetaMask provider");
+        } else {
+          throw new Error("MetaMask not found among wallet providers");
+        }
+      } else {
+        // Single provider (likely MetaMask)
+        console.log("Single provider detected, requesting accounts...");
+        
+        const accounts = await ethereum.request({ 
+          method: "eth_requestAccounts" 
+        });
+        
+        console.log("Accounts received:", accounts);
+        
+        if (accounts.length === 0) {
+          throw new Error("No accounts found. Please unlock MetaMask.");
+        }
+
+        const account = accounts[0];
+        setAccount(account);
+        console.log("Account set:", account);
+        
+        // Create wallet client
         const w = createWalletClient({ 
           chain, 
-          transport: custom((window as any).ethereum) 
+          transport: custom(ethereum) 
         });
         setWallet(w);
         console.log("Wallet client created");
       }
       
       setSuccess("Wallet connected successfully!");
-      setTimeout(() => setSuccess(""), 3000); // Clear success message after 3 seconds
-    } catch (error) {
+      setTimeout(() => setSuccess(""), 3000);
+      
+    } catch (error: any) {
       console.error("Wallet connection error:", error);
-      setError("Failed to connect wallet: " + (error as Error).message);
+      
+      // Handle specific error types
+      let errorMessage = "Failed to connect wallet";
+      
+      if (error.code === 4001) {
+        errorMessage = "Connection rejected by user";
+      } else if (error.code === -32002) {
+        errorMessage = "Connection request already pending. Please check MetaMask.";
+      } else if (error.message?.includes("User rejected")) {
+        errorMessage = "Connection rejected by user";
+      } else if (error.message?.includes("already pending")) {
+        errorMessage = "Connection already in progress. Please check MetaMask.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading("");
     }
@@ -246,9 +308,23 @@ export default function BuyPage({ params }: { params: { address: `0x${string}` }
                     </div>
                     <h3 className="text-xl font-bold text-gray-900 mb-4">Connect Your Wallet</h3>
                     <p className="text-gray-600 mb-6">Connect your MetaMask wallet to purchase an access pass</p>
-                    <button onClick={connectWallet} className="btn-primary">
-                      Connect MetaMask Wallet
-                    </button>
+                    <div className="space-y-3">
+                      <button onClick={connectWallet} className="btn-primary w-full">
+                        Connect MetaMask Wallet
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setAccount(undefined);
+                          setWallet(null);
+                          setError("");
+                          setSuccess("");
+                          console.log("Wallet state reset");
+                        }}
+                        className="btn-secondary w-full text-sm"
+                      >
+                        Reset Connection
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-6">
