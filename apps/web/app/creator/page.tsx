@@ -4,7 +4,6 @@ import { formatEther, parseEther } from 'viem';
 import ExperienceAbi from '../../abi/Experience.json';
 import { lighthouseService, isLighthouseAvailable, ExperienceIndex, PurchaseIndex } from '../../lib/lighthouse';
 import { experienceRegistryService, ExperienceInfo } from '../../lib/experienceRegistry';
-import { mockExperienceRegistryService } from '../../lib/mockExperienceRegistry';
 import { useWallet } from '../../contexts/WalletContext';
 import WalletButton from '../../components/WalletButton';
 import { publicClient } from '../../lib/viemClient';
@@ -239,22 +238,13 @@ export default function CreatorDashboard() {
           allExperiences.set(recentExp.address.toLowerCase(), recentExp);
         }
 
-        // If still no data, check known experiences
+        // If still no data, show empty state
         if (allExperiences.size === 0) {
-          setLoading('Loading known experiences...');
+          setLoading('No experiences found');
           setDataSource('known');
-          const knownCreated = await loadKnownExperiences();
-          const knownPurchased = await loadPurchasedExperiences();
-          
-          for (const exp of knownCreated) {
-            allExperiences.set(exp.address.toLowerCase(), exp);
-          }
-          for (const exp of knownPurchased) {
-            allExperiences.set(exp.address.toLowerCase(), exp);
-          }
         } else {
           setDataSource(registryLoaded ? 'registry' : 
-                        lighthouseLoaded && recentExperiences.length > 0 ? 'hybrid' : 
+                        lighthouseLoaded && recentExperiences.length > 0 ? 'hybrid' :
                         lighthouseLoaded ? 'lighthouse' : 'blockchain');
         }
 
@@ -338,54 +328,15 @@ export default function CreatorDashboard() {
     return created;
   }
 
-  async function loadKnownExperiences(): Promise<ExperienceInfo[]> {
-    // Known experiences that users might have purchased or created
-    const knownAddresses = [
-      '0x5455558b5ca1E0622d63857d15a7cBcE5eE1322A',
-      '0xBA0182EEfF04A8d7BAA04Afcc4BBCd0ac74Ce88F',
-      // Add more known experience addresses here as they are deployed
-    ];
-
-    const created: ExperienceInfo[] = [];
-
-    for (const address of knownAddresses) {
-      try {
-        const info = await getExperienceInfo(address, account);
-
-        // Only add to created if user is the creator
-        if (info.isCreator) {
-          created.push(info);
-        }
-      } catch (err) {
-        console.error('Failed to load known experience:', address, err);
-      }
-    }
-
-    return created;
-  }
+  // Load experiences from blockchain events only (no hardcoded addresses)
 
   async function loadPurchasedExperiences() {
-    // Load purchased experiences from known addresses
-    const knownAddresses = [
-      '0x5455558b5ca1E0622d63857d15a7cBcE5eE1322A',
-      '0xBA0182EEfF04A8d7BAA04Afcc4BBCd0ac74Ce88F',
-    ];
-
+    // Load purchased experiences from blockchain events only (no hardcoded addresses)
     const purchased: ExperienceInfo[] = [];
-
-    for (const address of knownAddresses) {
-      try {
-        const info = await getExperienceInfo(address, account);
-
-        // Only add to purchased if user owns passes but didn't create it
-        if (info.passBalance > 0 && !info.isCreator) {
-          purchased.push(info);
-        }
-      } catch (err) {
-        console.error('Failed to load known experience:', address, err);
-      }
-    }
-
+    
+    // This function will be populated with real blockchain event data
+    // when users actually purchase experiences
+    
     setPurchasedExperiences(purchased);
   }
 

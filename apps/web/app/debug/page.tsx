@@ -22,10 +22,7 @@ export default function DebugPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [customAddress, setCustomAddress] = useState<string>('');
 
-  const knownAddresses = [
-    '0x5455558b5ca1E0622d63857d15a7cBcE5eE1322A',
-    '0xBA0182EEfF04A8d7BAA04Afcc4BBCd0ac74Ce88F',
-  ];
+  // No hardcoded addresses - only use real deployed contracts
 
   async function checkExperience(address: string): Promise<ExperienceResult> {
     try {
@@ -86,18 +83,7 @@ export default function DebugPage() {
     }
   }
 
-  async function checkAllKnownExperiences() {
-    setLoading(true);
-    const results: ExperienceResult[] = [];
-    
-    for (const address of knownAddresses) {
-      const result = await checkExperience(address);
-      results.push(result);
-    }
-    
-    setResults(results);
-    setLoading(false);
-  }
+  // No hardcoded addresses - only check custom addresses
 
   async function checkCustomExperience() {
     if (!customAddress.trim()) return;
@@ -188,27 +174,6 @@ export default function DebugPage() {
               }}>
                 {account}
               </div>
-            </div>
-
-            {/* Check Known Experiences */}
-            <div style={{ marginBottom: '30px' }}>
-              <h3 style={{ margin: '0 0 15px 0', color: '#374151' }}>Check Known Experiences:</h3>
-              <button
-                onClick={checkAllKnownExperiences}
-                disabled={loading}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: loading ? '#9ca3af' : '#3b82f6',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '16px',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  fontWeight: '600'
-                }}
-              >
-                {loading ? '🔄 Checking...' : '🔍 Check All Known'}
-              </button>
             </div>
 
             {/* Check Custom Experience */}

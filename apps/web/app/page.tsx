@@ -6,132 +6,10 @@ import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
 import { useWallet } from "../contexts/WalletContext";
 
-const EXPERIENCE_ADDRESS = process.env.NEXT_PUBLIC_EXPERIENCE_ADDRESS || '0x5455558b5ca1E0622d63857d15a7cBcE5eE1322A';
-
-// Mock experience data for trending and location-based experiences
-const TRENDING_EXPERIENCES = [
-  {
-    id: 1,
-    address: '0x5455558b5ca1E0622d63857d15a7cBcE5eE1322A',
-    title: 'Tokyo Food Adventure',
-    description: 'Explore authentic street food and hidden gems in Tokyo\'s bustling districts',
-    price: '0.05',
-    image: '🍜',
-    category: 'Food & Drink',
-    location: 'Tokyo, Japan',
-    creator: '0xa8B131BfeBfc63c67263b8EA33cE91FA624FD9b6',
-    purchases: 127,
-    rating: 4.8,
-    trending: true
-  },
-  {
-    id: 2,
-    address: '0xBA0182EEfF04A8d7BAA04Afcc4BBCd0ac74Ce88F',
-    title: 'Santorini Sunset Tour',
-    description: 'Private sunset photography tour with local photographer guide',
-    price: '0.08',
-    image: '🌅',
-    category: 'Tours',
-    location: 'Santorini, Greece',
-    creator: '0xa8B131BfeBfc63c67263b8EA33cE91FA624FD9b6',
-    purchases: 89,
-    rating: 4.9,
-    trending: true
-  },
-  {
-    id: 3,
-    address: '0x9585A7C5B664c6575cda710173B8d662E8EA0B87',
-    title: 'Bali Wellness Retreat',
-    description: '7-day wellness retreat with yoga, meditation, and traditional healing',
-    price: '0.15',
-    image: '🧘',
-    category: 'Wellness',
-    location: 'Ubud, Bali',
-    creator: '0xa8B131BfeBfc63c67263b8EA33cE91FA624FD9b6',
-    purchases: 156,
-    rating: 4.7,
-    trending: true
-  },
-  {
-    id: 4,
-    address: '0x1234567890123456789012345678901234567890',
-    title: 'Paris Art Walk',
-    description: 'Guided tour through Montmartre\'s art galleries and street art',
-    price: '0.06',
-    image: '🎨',
-    category: 'Tours',
-    location: 'Paris, France',
-    creator: '0xa8B131BfeBfc63c67263b8EA33cE91FA624FD9b6',
-    purchases: 203,
-    rating: 4.6,
-    trending: true
-  }
-];
-
-const LOCATION_EXPERIENCES = {
-  'New York': [
-    {
-      id: 5,
-      address: '0x2345678901234567890123456789012345678901',
-      title: 'NYC Street Food Crawl',
-      description: 'Taste the best street food across Manhattan\'s diverse neighborhoods',
-      price: '0.04',
-      image: '🌭',
-      category: 'Food & Drink',
-      location: 'New York, USA',
-      creator: '0xa8B131BfeBfc63c67263b8EA33cE91FA624FD9b6',
-      purchases: 78,
-      rating: 4.5
-    },
-    {
-      id: 6,
-      address: '0x3456789012345678901234567890123456789012',
-      title: 'Broadway Behind the Scenes',
-      description: 'Exclusive backstage tour of Broadway theaters and meet the cast',
-      price: '0.12',
-      image: '🎭',
-      category: 'Entertainment & Shows',
-      location: 'New York, USA',
-      creator: '0xa8B131BfeBfc63c67263b8EA33cE91FA624FD9b6',
-      purchases: 45,
-      rating: 4.9
-    }
-  ],
-  'London': [
-    {
-      id: 7,
-      address: '0x4567890123456789012345678901234567890123',
-      title: 'London Pub History Tour',
-      description: 'Discover the history of London\'s oldest pubs and traditional ales',
-      price: '0.07',
-      image: '🍺',
-      category: 'Food & Drink',
-      location: 'London, UK',
-      creator: '0xa8B131BfeBfc63c67263b8EA33cE91FA624FD9b6',
-      purchases: 92,
-      rating: 4.4
-    }
-  ],
-  'Tokyo': [
-    {
-      id: 8,
-      address: '0x5678901234567890123456789012345678901234',
-      title: 'Tokyo Anime Culture Experience',
-      description: 'Visit anime studios, manga cafes, and cosplay districts',
-      price: '0.09',
-      image: '🎌',
-      category: 'Entertainment & Shows',
-      location: 'Tokyo, Japan',
-      creator: '0xa8B131BfeBfc63c67263b8EA33cE91FA624FD9b6',
-      purchases: 134,
-      rating: 4.8
-    }
-  ]
-};
+const EXPERIENCE_ADDRESS = process.env.NEXT_PUBLIC_EXPERIENCE_ADDRESS;
 
 export default function HomePage() {
   const { account, isConnected } = useWallet();
-  const [selectedLocation, setSelectedLocation] = useState<string>('New York');
 
   return (
     <div className="container mx-auto px-4 py-8 md:py-16">
@@ -154,11 +32,19 @@ export default function HomePage() {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
-            <Link href={`/experience/${EXPERIENCE_ADDRESS}/buy`}>
-              <Button size="lg" className="w-full sm:w-auto">
-                🎫 Buy Access Pass
-              </Button>
-            </Link>
+            {EXPERIENCE_ADDRESS ? (
+              <Link href={`/experience/${EXPERIENCE_ADDRESS}/buy`}>
+                <Button size="lg" className="w-full sm:w-auto">
+                  🎫 Buy Access Pass
+                </Button>
+              </Link>
+            ) : (
+              <Link href="/creator">
+                <Button size="lg" className="w-full sm:w-auto">
+                  🎨 Create First Experience
+                </Button>
+              </Link>
+            )}
             <Link href="/creator">
               <Button variant="secondary" size="lg" className="w-full sm:w-auto">
                 🎨 Creator Dashboard
@@ -186,141 +72,6 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-      </section>
-
-      {/* Trending Experiences Section */}
-      <section className="mb-16 md:mb-24">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            🔥 Trending Experiences
-          </h2>
-          <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-            Discover the most popular experiences our community is loving right now.
-          </p>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {TRENDING_EXPERIENCES.map((experience) => (
-            <Card key={experience.id} className="group hover:shadow-lg transition-all duration-300">
-              <div className="relative">
-                <div className="text-4xl mb-4 text-center">{experience.image}</div>
-                <Badge variant="primary" className="absolute top-2 right-2 text-xs">
-                  🔥 Trending
-                </Badge>
-              </div>
-              
-              <div className="mb-4">
-                <h3 className="text-lg font-semibold mb-2 line-clamp-2">{experience.title}</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-3 line-clamp-2">
-                  {experience.description}
-                </p>
-                <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400 mb-2">
-                  <span>📍 {experience.location}</span>
-                  <span>⭐ {experience.rating}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
-                  <Badge variant="secondary" size="sm">{experience.category}</Badge>
-                  <span>👥 {experience.purchases} sold</span>
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between mb-4">
-                <div className="text-lg font-bold text-primary-600">
-                  {experience.price} ETH
-                </div>
-                <Link href={`/experience/${experience.address}/buy`}>
-                  <Button size="sm" className="group-hover:bg-primary-600 transition-colors">
-                    Buy Pass
-                  </Button>
-                </Link>
-              </div>
-            </Card>
-          ))}
-        </div>
-        
-        <div className="text-center mt-8">
-          <Link href="/experience">
-            <Button variant="secondary" size="lg">
-              View All Experiences
-            </Button>
-          </Link>
-        </div>
-      </section>
-
-      {/* Location-Based Experiences Section */}
-      <section className="mb-16 md:mb-24">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            🌍 Experiences by Location
-          </h2>
-          <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-            Find amazing experiences in your favorite destinations around the world.
-          </p>
-        </div>
-        
-        {/* Location Selector */}
-        <div className="flex flex-wrap justify-center gap-4 mb-8">
-          {Object.keys(LOCATION_EXPERIENCES).map((location) => (
-            <Button
-              key={location}
-              variant={selectedLocation === location ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => setSelectedLocation(location)}
-              className="transition-all duration-200"
-            >
-              📍 {location}
-            </Button>
-          ))}
-        </div>
-        
-        {/* Location Experiences */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {LOCATION_EXPERIENCES[selectedLocation as keyof typeof LOCATION_EXPERIENCES]?.map((experience) => (
-            <Card key={experience.id} className="group hover:shadow-lg transition-all duration-300">
-              <div className="relative">
-                <div className="text-4xl mb-4 text-center">{experience.image}</div>
-                <Badge variant="success" className="absolute top-2 right-2 text-xs">
-                  📍 {experience.location.split(',')[0]}
-                </Badge>
-              </div>
-              
-              <div className="mb-4">
-                <h3 className="text-lg font-semibold mb-2 line-clamp-2">{experience.title}</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-3 line-clamp-2">
-                  {experience.description}
-                </p>
-                <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400 mb-2">
-                  <span>⭐ {experience.rating}</span>
-                  <span>👥 {experience.purchases} sold</span>
-                </div>
-                <div className="flex items-center justify-center">
-                  <Badge variant="secondary" size="sm">{experience.category}</Badge>
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between mb-4">
-                <div className="text-lg font-bold text-primary-600">
-                  {experience.price} ETH
-                </div>
-                <Link href={`/experience/${experience.address}/buy`}>
-                  <Button size="sm" className="group-hover:bg-primary-600 transition-colors">
-                    Buy Pass
-                  </Button>
-                </Link>
-              </div>
-            </Card>
-          ))}
-        </div>
-        
-        {isConnected && (
-          <div className="text-center mt-8">
-            <Link href="/creator">
-              <Button size="lg" className="bg-gradient-to-r from-primary-500 to-primary-700 hover:from-primary-600 hover:to-primary-800">
-                🎨 Create Your Own Experience
-              </Button>
-            </Link>
-          </div>
-        )}
       </section>
 
       {/* Features Section */}
@@ -462,11 +213,19 @@ export default function HomePage() {
               Join the Experience Protocol and start creating token-gated experiences today.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href={`/experience/${EXPERIENCE_ADDRESS}/buy`}>
-                <Button size="lg" className="w-full sm:w-auto">
-                  Buy Access Pass
-                </Button>
-              </Link>
+              {EXPERIENCE_ADDRESS ? (
+                <Link href={`/experience/${EXPERIENCE_ADDRESS}/buy`}>
+                  <Button size="lg" className="w-full sm:w-auto">
+                    Buy Access Pass
+                  </Button>
+                </Link>
+              ) : (
+                <Link href="/creator">
+                  <Button size="lg" className="w-full sm:w-auto">
+                    Create First Experience
+                  </Button>
+                </Link>
+              )}
               <Link href="/creator">
                 <Button variant="secondary" size="lg" className="w-full sm:w-auto">
                   Create Experience
