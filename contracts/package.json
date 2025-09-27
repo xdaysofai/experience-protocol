@@ -6,7 +6,7 @@
     "build": "hardhat compile",
     "run": "node --env-file=../.env",
     "deploy:amoy": "hardhat run scripts/deploy-amoy.js --network amoy",
-    "deploy:sepolia": "hardhat run scripts/deploy-sepolia.js --network sepolia",
+    "deploy:sepolia": "node --env-file=../.env ../node_modules/.bin/hardhat run scripts/deploy-sepolia.js --network sepolia",
     "cfg:set-prices:amoy": "node --env-file=../.env scripts/cfg-set-prices-amoy.js",
     "cfg:set-prices:sepolia": "hardhat run scripts/cfg-set-prices-sepolia.js --network sepolia"
   },

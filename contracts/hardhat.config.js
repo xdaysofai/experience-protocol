@@ -3,7 +3,8 @@ import "@nomicfoundation/hardhat-ethers";
 
 const AMOY = process.env.RPC_POLYGON_AMOY || "https://rpc-amoy.polygon.technology";
 const SEPOLIA = process.env.RPC_ETHEREUM_SEPOLIA || "https://rpc.sepolia.org";
-const PK = (process.env.PRIVATE_KEY_DEPLOYER || "").replace(/^0x/, "");
+const PK = process.env.PRIVATE_KEY_DEPLOYER || "";
+console.log("Private key loaded:", PK ? "✅ Yes" : "❌ No");
 
 const config = {
   solidity: {
@@ -18,7 +19,7 @@ const config = {
     },
     sepolia: {
       url: SEPOLIA,
-      accounts: PK ? [`0x${PK}`] : []
+      accounts: PK ? [PK] : []
     }
   }
 };
