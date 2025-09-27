@@ -96,31 +96,31 @@ export default function CreatorDashboard() {
         console.log('📋 Attempting to load from ExperienceRegistry...');
         
         // Try to get created experiences from registry
-        const registryCreated = await experienceRegistryService.getCreatedExperiences(account);
-        const registryPurchased = await experienceRegistryService.getPurchasedExperiences(account);
+        const registryCreatedAddresses = await experienceRegistryService.getCreatedExperiences(account);
+        const registryPurchasedAddresses = await experienceRegistryService.getPurchasedExperiences(account);
         
-        console.log('📋 Registry response:', { registryCreated: registryCreated.length, registryPurchased: registryPurchased.length });
+        console.log('📋 Registry response:', { registryCreated: registryCreatedAddresses.length, registryPurchased: registryPurchasedAddresses.length });
         
-        if (registryCreated.length > 0 || registryPurchased.length > 0) {
+        if (registryCreatedAddresses.length > 0 || registryPurchasedAddresses.length > 0) {
           registryLoaded = true;
           setDataSource('registry');
-          console.log(`📋 REGISTRY: Loaded ${registryCreated.length} created, ${registryPurchased.length} purchased from registry`);
+          console.log(`📋 REGISTRY: Loaded ${registryCreatedAddresses.length} created, ${registryPurchasedAddresses.length} purchased from registry`);
           
           // Convert registry data to ExperienceInfo format
           const created: ExperienceInfo[] = [];
           const purchased: ExperienceInfo[] = [];
           
-          for (const regExp of registryCreated) {
+          for (const address of registryCreatedAddresses) {
             try {
-              const info = await getExperienceInfo(regExp.address, account);
+              const info = await getExperienceInfo(address, account);
               created.push(info);
             } catch (err) {
-              // Fallback to registry data
+              // Fallback to basic info
               const fallback: ExperienceInfo = {
-                address: regExp.address,
-                owner: regExp.creator,
-                cid: regExp.cid,
-                priceEthWei: regExp.totalRevenue,
+                address: address,
+                owner: account,
+                cid: 'unknown',
+                priceEthWei: 0n,
                 currentProposer: '0x0000000000000000000000000000000000000000',
                 isOwned: false,
                 passBalance: 0n,
@@ -130,20 +130,20 @@ export default function CreatorDashboard() {
             }
           }
           
-          for (const regPurchase of registryPurchased) {
+          for (const address of registryPurchasedAddresses) {
             try {
-              const info = await getExperienceInfo(regPurchase.experience, account);
+              const info = await getExperienceInfo(address, account);
               purchased.push(info);
             } catch (err) {
-              // Fallback to registry data
+              // Fallback to basic info
               const fallback: ExperienceInfo = {
-                address: regPurchase.experience,
+                address: address,
                 owner: account,
-                cid: '',
+                cid: 'unknown',
                 priceEthWei: 0n,
                 currentProposer: '0x0000000000000000000000000000000000000000',
                 isOwned: true,
-                passBalance: BigInt(regPurchase.quantity),
+                passBalance: 1n, // Assume at least 1 pass
                 isCreator: false,
               };
               purchased.push(fallback);
@@ -415,7 +415,7 @@ export default function CreatorDashboard() {
       address: lhExp.address,
       owner: lhExp.creator,
       cid: lhExp.cid || '',
-      priceEthWei: lhExp.priceEth ? parseEther(lhExp.priceEth) : 0n,
+      priceEthWei: lhExp.metadata?.priceEth ? parseEther(lhExp.metadata.priceEth) : 0n,
       currentProposer: ZERO_ADDRESS,
       isOwned: false,
       passBalance: 0n,
@@ -426,7 +426,8 @@ export default function CreatorDashboard() {
   // Lighthouse functions
   async function loadFromLighthouse(): Promise<ExperienceIndex[]> {
     if (!lighthouseHash) return [];
-    return await lighthouseService.loadCreatorExperienceList(lighthouseHash);
+    const data = await lighthouseService.loadCreatorExperienceList(lighthouseHash);
+    return data.experiences || [];
   }
 
   async function syncExperiencesToLighthouse(experiences: ExperienceInfo[]) {
@@ -436,8 +437,10 @@ export default function CreatorDashboard() {
       address: exp.address,
       creator: exp.owner,
       cid: exp.cid,
-      priceEth: exp.priceEthWei > 0n ? formatEther(exp.priceEthWei) : undefined,
       createdAt: Date.now(),
+      metadata: {
+        priceEth: exp.priceEthWei > 0n ? formatEther(exp.priceEthWei) : undefined,
+      },
     }));
 
     const newHash = await lighthouseService.saveCreatorExperienceList(account, lighthouseData);
@@ -454,8 +457,10 @@ export default function CreatorDashboard() {
       address: experience.address,
       creator: experience.owner,
       cid: experience.cid,
-      priceEth: experience.priceEthWei > 0n ? formatEther(experience.priceEthWei) : undefined,
       createdAt: Date.now(),
+      metadata: {
+        priceEth: experience.priceEthWei > 0n ? formatEther(experience.priceEthWei) : undefined,
+      },
     };
 
     const newHash = await lighthouseService.addExperienceToList(account, lighthouseData, lighthouseHash);
@@ -706,20 +711,17 @@ export default function CreatorDashboard() {
                 Sync your experiences across devices and get instant loading
               </p>
             </div>
-            <button
-              onClick={() => setShowLighthouseSetup(true)}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#f59e0b',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
-            >
-              Enable Sync
-            </button>
+            <div style={{
+              padding: '8px 16px',
+              backgroundColor: '#10b981',
+              color: 'white',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: '500',
+              textAlign: 'center'
+            }}>
+              ✅ Lighthouse Enabled
+            </div>
           </div>
         </div>
       )}
@@ -894,8 +896,7 @@ export default function CreatorDashboard() {
               createdExperiences.map((exp) => (
                 <div key={exp.address} style={{
                   padding: '20px',
-                  borderBottom: '1px solid #f3f4f6',
-                  ':last-child': { borderBottom: 'none' }
+                  borderBottom: '1px solid #f3f4f6'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                     <div style={{ flex: 1 }}>
@@ -1109,8 +1110,7 @@ export default function CreatorDashboard() {
               purchasedExperiences.map((exp) => (
                 <div key={exp.address} style={{
                   padding: '20px',
-                  borderBottom: '1px solid #f3f4f6',
-                  ':last-child': { borderBottom: 'none' }
+                  borderBottom: '1px solid #f3f4f6'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                     <div style={{ flex: 1 }}>
