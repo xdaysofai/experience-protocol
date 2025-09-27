@@ -2,7 +2,7 @@ import "dotenv/config";
 import "@nomicfoundation/hardhat-ethers";
 
 const AMOY = process.env.RPC_POLYGON_AMOY || "https://rpc-amoy.polygon.technology";
-const SEPOLIA = process.env.RPC_ETHEREUM_SEPOLIA || "https://ethereum-sepolia-rpc.publicnode.com";
+const SEPOLIA = process.env.RPC_ETHEREUM_SEPOLIA || "https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161";
 const PK = process.env.PRIVATE_KEY_DEPLOYER || "";
 console.log("Private key loaded:", PK ? "✅ Yes" : "❌ No");
 

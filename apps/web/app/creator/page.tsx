@@ -4,6 +4,7 @@ import { formatEther, parseEther } from 'viem';
 import ExperienceAbi from '../../abi/Experience.json';
 import { lighthouseService, isLighthouseAvailable, promptForApiKey, ExperienceIndex, PurchaseIndex } from '../../lib/lighthouse';
 import { experienceRegistryService, ExperienceInfo } from '../../lib/experienceRegistry';
+import { mockExperienceRegistryService } from '../../lib/mockExperienceRegistry';
 import { useWallet } from '../../contexts/WalletContext';
 import WalletButton from '../../components/WalletButton';
 import { publicClient } from '../../lib/viemClient';
@@ -61,33 +62,101 @@ export default function CreatorDashboard() {
   // Enhanced loading states for better UX
   const [lighthouseLoading, setLighthouseLoading] = useState<boolean>(false);
   const [blockchainLoading, setBlockchainLoading] = useState<boolean>(false);
-  const [dataSource, setDataSource] = useState<'lighthouse' | 'blockchain' | 'hybrid' | 'known'>('known');
+  const [dataSource, setDataSource] = useState<'registry' | 'lighthouse' | 'blockchain' | 'hybrid' | 'known'>('known');
 
   function clearExperiences() {
     setCreatedExperiences([]);
     setPurchasedExperiences([]);
   }
 
-  // ENHANCED SMART FALLBACK STRATEGY
+  // ENHANCED SMART FALLBACK STRATEGY WITH REGISTRY PRIORITY
   async function loadExperiences() {
     if (!account) return;
     
     try {
       setLoading('Loading experiences...');
       
-      // PHASE 1: INSTANT UX - Load from Lighthouse first (if available)
+      // PHASE 1: REGISTRY FIRST - Try to load from ExperienceRegistry (if deployed)
+      let registryExperiences: ExperienceInfo[] = [];
+      let registryLoaded = false;
+      
+      try {
+        setLoading('📋 Loading from Registry (primary)...');
+        
+        // Try to get created experiences from registry
+        const registryCreated = await experienceRegistryService.getCreatedExperiences(account);
+        const registryPurchased = await experienceRegistryService.getPurchasedExperiences(account);
+        
+        if (registryCreated.length > 0 || registryPurchased.length > 0) {
+          registryLoaded = true;
+          setDataSource('registry');
+          console.log(`📋 REGISTRY: Loaded ${registryCreated.length} created, ${registryPurchased.length} purchased from registry`);
+          
+          // Convert registry data to ExperienceInfo format
+          const created: ExperienceInfo[] = [];
+          const purchased: ExperienceInfo[] = [];
+          
+          for (const regExp of registryCreated) {
+            try {
+              const info = await getExperienceInfo(regExp.address, account);
+              created.push(info);
+            } catch (err) {
+              // Fallback to registry data
+              const fallback: ExperienceInfo = {
+                address: regExp.address,
+                owner: regExp.creator,
+                cid: regExp.cid,
+                priceEthWei: regExp.totalRevenue,
+                currentProposer: '0x0000000000000000000000000000000000000000',
+                isOwned: false,
+                passBalance: 0n,
+                isCreator: true,
+              };
+              created.push(fallback);
+            }
+          }
+          
+          for (const regPurchase of registryPurchased) {
+            try {
+              const info = await getExperienceInfo(regPurchase.experience, account);
+              purchased.push(info);
+            } catch (err) {
+              // Fallback to registry data
+              const fallback: ExperienceInfo = {
+                address: regPurchase.experience,
+                owner: account,
+                cid: '',
+                priceEthWei: 0n,
+                currentProposer: '0x0000000000000000000000000000000000000000',
+                isOwned: true,
+                passBalance: BigInt(regPurchase.quantity),
+                isCreator: false,
+              };
+              purchased.push(fallback);
+            }
+          }
+          
+          setCreatedExperiences(created);
+          setPurchasedExperiences(purchased);
+          setLoading('✅ Registry data loaded! Syncing with blockchain...');
+        }
+      } catch (err) {
+        console.warn('Registry load failed, falling back to Lighthouse/blockchain:', err);
+      }
+
+      // PHASE 2: LIGHTHOUSE FALLBACK - Load from Lighthouse (if registry failed)
       let lighthouseExperiences: ExperienceIndex[] = [];
       let lighthouseLoaded = false;
       
-      if (lighthouseEnabled && lighthouseHash) {
+      if (!registryLoaded && lighthouseEnabled && lighthouseHash) {
         try {
           setLighthouseLoading(true);
-          setLoading('📦 Loading from Lighthouse (instant)...');
+          setLoading('📦 Loading from Lighthouse (fallback)...');
           
           lighthouseExperiences = await loadFromLighthouse();
           lighthouseLoaded = true;
           setDataSource('lighthouse');
-          console.log(`📦 INSTANT: Loaded ${lighthouseExperiences.length} experiences from Lighthouse`);
+          console.log(`📦 LIGHTHOUSE: Loaded ${lighthouseExperiences.length} experiences from Lighthouse`);
           
           // IMMEDIATELY show Lighthouse data for instant UX
           const instantCreated: ExperienceInfo[] = [];
@@ -117,7 +186,7 @@ export default function CreatorDashboard() {
           setLighthouseLoading(false);
           
           // Show user that data is loaded and we're syncing
-          setLoading('✅ Data loaded! Syncing with blockchain...');
+          setLoading('✅ Lighthouse data loaded! Syncing with blockchain...');
           
         } catch (err) {
           console.warn('Lighthouse load failed, falling back to blockchain:', err);
@@ -125,11 +194,11 @@ export default function CreatorDashboard() {
         }
       }
 
-      // PHASE 2: BACKGROUND SYNC - Load recent blockchain data (with timeout)
+      // PHASE 3: BLOCKCHAIN SYNC - Load recent blockchain data (with timeout)
       const factoryAddress = process.env.NEXT_PUBLIC_FACTORY_ADDRESS as `0x${string}`;
       let recentExperiences: ExperienceInfo[] = [];
       
-      if (factoryAddress) {
+      if (factoryAddress && (!registryLoaded || !lighthouseLoaded)) {
         try {
           setBlockchainLoading(true);
           
@@ -141,17 +210,16 @@ export default function CreatorDashboard() {
           
           recentExperiences = await Promise.race([blockchainPromise, timeoutPromise]);
           setBlockchainLoading(false);
-          console.log(`🔗 BACKGROUND: Found ${recentExperiences.length} recent experiences from blockchain`);
+          console.log(`🔗 BLOCKCHAIN: Found ${recentExperiences.length} recent experiences from blockchain`);
           
         } catch (err: any) {
           setBlockchainLoading(false);
-          console.warn('Blockchain sync failed (using Lighthouse data):', err.message);
-          // Continue with Lighthouse data if blockchain fails
+          console.warn('Blockchain sync failed:', err.message);
         }
       }
 
-      // PHASE 3: MERGE - Combine Lighthouse + recent blockchain data
-      if (recentExperiences.length > 0 || !lighthouseLoaded) {
+      // PHASE 4: MERGE - Combine all data sources
+      if (recentExperiences.length > 0 || (!registryLoaded && !lighthouseLoaded)) {
         const allExperiences = new Map<string, ExperienceInfo>();
         
         // Add Lighthouse data first (if we have it)
@@ -186,7 +254,9 @@ export default function CreatorDashboard() {
             allExperiences.set(exp.address.toLowerCase(), exp);
           }
         } else {
-          setDataSource(lighthouseLoaded && recentExperiences.length > 0 ? 'hybrid' : lighthouseLoaded ? 'lighthouse' : 'blockchain');
+          setDataSource(registryLoaded ? 'registry' : 
+                        lighthouseLoaded && recentExperiences.length > 0 ? 'hybrid' : 
+                        lighthouseLoaded ? 'lighthouse' : 'blockchain');
         }
 
         // Convert to arrays and separate created vs purchased
@@ -197,7 +267,7 @@ export default function CreatorDashboard() {
         setCreatedExperiences(created);
         setPurchasedExperiences(purchased);
 
-        // PHASE 4: AUTO-SYNC - Save new blockchain findings to Lighthouse
+        // PHASE 5: AUTO-SYNC - Save new blockchain findings to Lighthouse
         if (lighthouseEnabled && recentExperiences.length > 0) {
           try {
             await syncExperiencesToLighthouse(created);
@@ -642,20 +712,24 @@ export default function CreatorDashboard() {
         marginBottom: '20px',
         padding: '12px',
         borderRadius: '8px',
-        backgroundColor: dataSource === 'lighthouse' ? '#f0fdf4' : 
+        backgroundColor: dataSource === 'registry' ? '#f0f9ff' : 
+                         dataSource === 'lighthouse' ? '#f0fdf4' : 
                          dataSource === 'blockchain' ? '#fef3c7' :
                          dataSource === 'hybrid' ? '#dbeafe' : '#f3f4f6',
-        border: `1px solid ${dataSource === 'lighthouse' ? '#22c55e' : 
+        border: `1px solid ${dataSource === 'registry' ? '#0ea5e9' :
+                             dataSource === 'lighthouse' ? '#22c55e' : 
                              dataSource === 'blockchain' ? '#f59e0b' :
                              dataSource === 'hybrid' ? '#3b82f6' : '#9ca3af'}`
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {dataSource === 'registry' && <span>📋</span>}
           {dataSource === 'lighthouse' && <span>📦</span>}
           {dataSource === 'blockchain' && <span>🔗</span>}
           {dataSource === 'hybrid' && <span>⚡</span>}
           {dataSource === 'known' && <span>📋</span>}
           <span style={{ fontWeight: '500' }}>
-            Data Source: {dataSource === 'lighthouse' ? 'Lighthouse (Instant)' :
+            Data Source: {dataSource === 'registry' ? 'Registry (Primary)' :
+                         dataSource === 'lighthouse' ? 'Lighthouse (Fallback)' :
                          dataSource === 'blockchain' ? 'Blockchain (Recent)' :
                          dataSource === 'hybrid' ? 'Hybrid (Lighthouse + Blockchain)' :
                          'Known Experiences'}

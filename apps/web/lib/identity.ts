@@ -6,6 +6,14 @@ export interface AddressIdentity {
   ensName?: string | null;
   verified?: boolean;
   reason?: string;
+  reputation?: number;
+  badges?: string[];
+  socialProofs?: {
+    twitter?: string;
+    github?: string;
+    discord?: string;
+  };
+  source?: 'ens' | 'self' | 'fallback';
 }
 
 export async function resolveAddressIdentity(address?: string): Promise<AddressIdentity | null> {
@@ -30,6 +38,10 @@ export async function resolveAddressIdentity(address?: string): Promise<AddressI
       ensName,
       verified: result?.eligible ?? false,
       reason: result?.reason,
+      reputation: result?.eligible ? 75 : 0,
+      badges: result?.eligible ? ['self'] : [],
+      socialProofs: {},
+      source: 'self',
     };
   } catch (err) {
     console.debug('Self identity lookup skipped:', (err as Error)?.message);
@@ -38,6 +50,11 @@ export async function resolveAddressIdentity(address?: string): Promise<AddressI
   return {
     address: normalized,
     ensName,
+    verified: !!ensName,
+    reputation: ensName ? 50 : 0,
+    badges: ensName ? ['ens'] : [],
+    socialProofs: {},
+    source: ensName ? 'ens' : 'fallback',
   };
 }
 
@@ -47,4 +64,58 @@ export function formatAddress(address: string, identity?: AddressIdentity | null
   }
   if (!address) return '—';
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+// Get reputation badge
+export function getReputationBadge(reputation?: number): string {
+  if (!reputation) return '⭐';
+  if (reputation >= 90) return '🏆';
+  if (reputation >= 75) return '🥇';
+  if (reputation >= 50) return '🥈';
+  if (reputation >= 25) return '🥉';
+  return '⭐';
+}
+
+// Get verification status
+export function getVerificationStatus(identity: AddressIdentity): string {
+  if (identity.source === 'self' && identity.verified) {
+    return 'Self Protocol Verified';
+  }
+  if (identity.source === 'ens' && identity.ensName) {
+    return 'ENS Verified';
+  }
+  return 'Unverified';
+}
+
+// Check if address has high reputation
+export function isHighReputation(identity: AddressIdentity): boolean {
+  return (identity.reputation || 0) >= 75;
+}
+
+// Get social proof links
+export function getSocialProofLinks(identity: AddressIdentity): Array<{platform: string, url: string}> {
+  const links: Array<{platform: string, url: string}> = [];
+  
+  if (identity.socialProofs?.twitter) {
+    links.push({
+      platform: 'Twitter',
+      url: `https://twitter.com/${identity.socialProofs.twitter}`
+    });
+  }
+  
+  if (identity.socialProofs?.github) {
+    links.push({
+      platform: 'GitHub',
+      url: `https://github.com/${identity.socialProofs.github}`
+    });
+  }
+  
+  if (identity.socialProofs?.discord) {
+    links.push({
+      platform: 'Discord',
+      url: identity.socialProofs.discord
+    });
+  }
+  
+  return links;
 }
