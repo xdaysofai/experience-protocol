@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { formatEther, parseEther } from 'viem';
 import ExperienceAbi from '../../abi/Experience.json';
 import { lighthouseService, isLighthouseAvailable, ExperienceIndex, PurchaseIndex } from '../../lib/lighthouse';
-import { experienceRegistryService, ExperienceInfo } from '../../lib/experienceRegistry';
+import { experienceRegistryService, ExperienceInfo as RegistryExperienceInfo } from '../../lib/experienceRegistry';
 import { useWallet } from '../../contexts/WalletContext';
 import WalletButton from '../../components/WalletButton';
 import { publicClient } from '../../lib/viemClient';
@@ -35,6 +35,18 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 export default function CreatorDashboard() {
   const { account, wallet, isConnected, isWrongNetwork } = useWallet();
+  
+  // Debug: Log wallet state changes
+  useEffect(() => {
+    console.log('Creator Dashboard - Wallet State:', {
+      account,
+      isConnected,
+      isWrongNetwork,
+      wallet: !!wallet,
+      timestamp: new Date().toISOString()
+    });
+  }, [account, isConnected, isWrongNetwork, wallet]);
+  
   const [loading, setLoading] = useState<string>('');
   const [error, setError] = useState<string>('');
   
@@ -591,23 +603,6 @@ export default function CreatorDashboard() {
         <p style={{ marginBottom: '30px', color: '#6b7280' }}>
           Connect your wallet to manage your experiences
         </p>
-        
-        {/* Debug info */}
-        <div style={{ 
-          marginBottom: '20px', 
-          padding: '10px', 
-          backgroundColor: '#f3f4f6', 
-          borderRadius: '8px',
-          fontSize: '12px',
-          textAlign: 'left'
-        }}>
-          <strong>Debug Info:</strong><br/>
-          Account: {account || 'None'}<br/>
-          Connected: {isConnected ? 'Yes' : 'No'}<br/>
-          Wrong Network: {isWrongNetwork ? 'Yes' : 'No'}<br/>
-          Wallet: {wallet ? 'Available' : 'None'}
-        </div>
-        
         <WalletButton size="lg" />
       </div>
     );

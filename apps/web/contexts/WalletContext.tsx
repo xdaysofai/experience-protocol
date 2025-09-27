@@ -122,13 +122,49 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   // Auto-reconnect on page load
   useEffect(() => {
-    const wasConnected = localStorage.getItem('wallet_connected');
-    const lastAccount = localStorage.getItem('wallet_account');
-    
-    if (wasConnected === 'true' && lastAccount) {
-      console.log('Auto-reconnecting wallet...');
-      connectWallet();
+    async function restoreConnection() {
+      const wasConnected = localStorage.getItem('wallet_connected');
+      const lastAccount = localStorage.getItem('wallet_account');
+      
+      if (wasConnected === 'true' && lastAccount) {
+        console.log('Restoring wallet connection...');
+        try {
+          const provider = await getInjectedProvider();
+          if (provider) {
+            // Check if the account is still connected
+            const accounts = await provider.request({ method: 'eth_accounts' });
+            if (accounts.includes(lastAccount)) {
+              setAccount(lastAccount);
+              
+              // Create wallet client
+              const walletClient = createWalletClient({ 
+                chain: sepolia, 
+                transport: custom(provider) 
+              });
+              setWallet(walletClient);
+              
+              // Check network
+              const chainId = await provider.request({ method: 'eth_chainId' });
+              const wrongNetwork = chainId !== '0xaa36a7';
+              setIsWrongNetwork(wrongNetwork);
+              
+              console.log('Wallet connection restored:', lastAccount);
+            } else {
+              // Account not connected anymore, clear localStorage
+              localStorage.removeItem('wallet_connected');
+              localStorage.removeItem('wallet_account');
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to restore wallet connection:', err);
+          // Clear localStorage on error
+          localStorage.removeItem('wallet_connected');
+          localStorage.removeItem('wallet_account');
+        }
+      }
     }
+    
+    restoreConnection();
   }, []);
 
   // Listen for account/network changes
