@@ -1,12 +1,19 @@
 "use client";
 import { useWallet } from '../contexts/WalletContext';
+import Button from './ui/Button';
+import Badge from './ui/Badge';
 
 interface WalletButtonProps {
   size?: 'sm' | 'md' | 'lg';
   showFullAddress?: boolean;
+  className?: string;
 }
 
-export default function WalletButton({ size = 'md', showFullAddress = false }: WalletButtonProps) {
+export default function WalletButton({ 
+  size = 'md', 
+  showFullAddress = false, 
+  className = '' 
+}: WalletButtonProps) {
   const { 
     account, 
     isConnected, 
@@ -17,85 +24,55 @@ export default function WalletButton({ size = 'md', showFullAddress = false }: W
     switchToSepolia 
   } = useWallet();
 
-  const sizeStyles = {
-    sm: {
-      padding: '6px 12px',
-      fontSize: '12px',
-      fontWeight: '500'
-    },
-    md: {
-      padding: '8px 16px',
-      fontSize: '14px',
-      fontWeight: '500'
-    },
-    lg: {
-      padding: '12px 24px',
-      fontSize: '16px',
-      fontWeight: '600'
-    }
-  };
-
-  const buttonStyle = sizeStyles[size];
-
   if (!isConnected) {
     return (
-      <button 
+      <Button
         onClick={connectWallet}
         disabled={loading !== ''}
-        style={{
-          ...buttonStyle,
-          backgroundColor: loading !== '' ? '#9ca3af' : '#3b82f6',
-          color: 'white',
-          border: 'none',
-          borderRadius: '8px',
-          cursor: loading !== '' ? 'not-allowed' : 'pointer'
-        }}
+        size={size}
+        className={className}
+        loading={loading !== ''}
       >
-        {loading || 'Connect Wallet'}
-      </button>
+        Connect Wallet
+      </Button>
+    );
+  }
+
+  if (isWrongNetwork) {
+    return (
+      <div className="flex items-center gap-2">
+        <Badge variant="warning" size="sm">
+          Wrong Network
+        </Badge>
+        <Button
+          onClick={switchToSepolia}
+          variant="warning"
+          size={size}
+          className={className}
+        >
+          Switch to Sepolia
+        </Button>
+      </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <div style={{
-        ...buttonStyle,
-        backgroundColor: '#10b981',
-        color: 'white',
-        borderRadius: '8px'
-      }}>
-        🟢 {showFullAddress ? account : `${account.slice(0, 6)}...${account.slice(-4)}`}
+    <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 px-3 py-2 bg-success-50 dark:bg-success-900/20 rounded-lg border border-success-200 dark:border-success-800">
+        <div className="w-2 h-2 bg-success-500 rounded-full animate-pulse" />
+        <span className="text-sm font-medium text-success-700 dark:text-success-300">
+          {showFullAddress ? account : `${account?.slice(0, 6)}...${account?.slice(-4)}`}
+        </span>
       </div>
       
-      {isWrongNetwork && (
-        <button 
-          onClick={switchToSepolia}
-          style={{
-            ...buttonStyle,
-            backgroundColor: '#f59e0b',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer'
-          }}
-        >
-          📡 Switch to Sepolia
-        </button>
-      )}
-      
-      <button 
+      <Button
         onClick={disconnectWallet}
-        style={{
-          ...buttonStyle,
-          backgroundColor: '#6b7280',
-          color: 'white',
-          border: 'none',
-          borderRadius: '8px',
-          cursor: 'pointer'
-        }}
+        variant="secondary"
+        size={size}
+        className={className}
       >
         Disconnect
-      </button>
+      </Button>
     </div>
   );
 }
