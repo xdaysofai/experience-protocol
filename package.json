@@ -1,0 +1,17 @@
+{
+  "name": "experience-protocol",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "i": "pnpm install",
+    "build": "pnpm -C contracts build && pnpm -C apps/web build",
+    "dev:web": "pnpm -C apps/web dev",
+    "dev:relayer": "pnpm -C apps/relayer dev"
+  },
+  "workspaces": [
+    "contracts",
+    "apps/web",
+    "apps/relayer",
+    "packages/sdk"
+  ]
+}
