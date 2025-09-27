@@ -85,6 +85,7 @@ export default function CreatorDashboard() {
     
     try {
       setLoading('Loading experiences...');
+      console.log('🔄 Starting to load experiences for account:', account);
       
       // PHASE 1: REGISTRY FIRST - Try to load from ExperienceRegistry (if deployed)
       let registryExperiences: ExperienceInfo[] = [];
@@ -92,10 +93,13 @@ export default function CreatorDashboard() {
       
       try {
         setLoading('📋 Loading from Registry (primary)...');
+        console.log('📋 Attempting to load from ExperienceRegistry...');
         
         // Try to get created experiences from registry
         const registryCreated = await experienceRegistryService.getCreatedExperiences(account);
         const registryPurchased = await experienceRegistryService.getPurchasedExperiences(account);
+        
+        console.log('📋 Registry response:', { registryCreated: registryCreated.length, registryPurchased: registryPurchased.length });
         
         if (registryCreated.length > 0 || registryPurchased.length > 0) {
           registryLoaded = true;
@@ -151,7 +155,8 @@ export default function CreatorDashboard() {
           setLoading('✅ Registry data loaded! Syncing with blockchain...');
         }
       } catch (err) {
-        console.warn('Registry load failed, falling back to Lighthouse/blockchain:', err);
+        console.warn('📋 Registry load failed, falling back to Lighthouse/blockchain:', err);
+        setDataSource('lighthouse');
       }
 
       // PHASE 2: LIGHTHOUSE FALLBACK - Load from Lighthouse (if registry failed)
@@ -162,6 +167,7 @@ export default function CreatorDashboard() {
         try {
           setLighthouseLoading(true);
           setLoading('📦 Loading from Lighthouse (fallback)...');
+          console.log('📦 Attempting to load from Lighthouse with hash:', lighthouseHash);
           
           lighthouseExperiences = await loadFromLighthouse();
           lighthouseLoaded = true;
@@ -280,8 +286,13 @@ export default function CreatorDashboard() {
       }
 
     } catch (err: any) {
-      console.error('Failed to load experiences:', err);
+      console.error('❌ Failed to load experiences:', err);
       setError('Failed to load experiences: ' + err.message);
+      
+      // Show empty state with helpful message
+      setCreatedExperiences([]);
+      setPurchasedExperiences([]);
+      setDataSource('known');
     } finally {
       setLoading('');
       setLighthouseLoading(false);
@@ -575,6 +586,13 @@ export default function CreatorDashboard() {
   // Effects
   useEffect(() => {
     if (isConnected && !isWrongNetwork && account) {
+      // Load Lighthouse hash from localStorage
+      const savedHash = lighthouseService.loadHashFromLocalStorage(account);
+      if (savedHash) {
+        setLighthouseHash(savedHash);
+        console.log('📦 Loaded Lighthouse hash from localStorage:', savedHash);
+      }
+      
       // Lighthouse is always enabled with platform key
       loadExperiences();
     }
