@@ -137,8 +137,8 @@ export default function CreatorDashboard() {
         }, 2000);
       }
       
-      // Always load known experiences to check for purchases
-      await loadKnownExperiences();
+      // Load purchased experiences from known addresses
+      await loadPurchasedExperiences();
       
     } catch (err: any) {
       console.error('Failed to load experiences:', err);
@@ -199,28 +199,48 @@ export default function CreatorDashboard() {
     return created;
   }
 
-  async function loadKnownExperiences() {
+  async function loadKnownExperiences(): Promise<ExperienceInfo[]> {
     // Known experiences that users might have purchased or created
-    const knownExperiences = [
+    const knownAddresses = [
       '0x5455558b5ca1E0622d63857d15a7cBcE5eE1322A',
       '0xBA0182EEfF04A8d7BAA04Afcc4BBCd0ac74Ce88F',
       // Add more known experience addresses here as they are deployed
     ];
 
+    const created: ExperienceInfo[] = [];
+    
+    for (const address of knownAddresses) {
+      try {
+        const info = await getExperienceInfo(address, account);
+        
+        // Only add to created if user is the creator
+        if (info.isCreator) {
+          created.push(info);
+        }
+      } catch (err) {
+        console.error('Failed to load known experience:', address, err);
+      }
+    }
+    
+    return created;
+  }
+
+  async function loadPurchasedExperiences() {
+    // Load purchased experiences from known addresses
+    const knownAddresses = [
+      '0x5455558b5ca1E0622d63857d15a7cBcE5eE1322A',
+      '0xBA0182EEfF04A8d7BAA04Afcc4BBCd0ac74Ce88F',
+    ];
+
     const purchased: ExperienceInfo[] = [];
     
-    for (const address of knownExperiences) {
+    for (const address of knownAddresses) {
       try {
         const info = await getExperienceInfo(address, account);
         
         // Only add to purchased if user owns passes but didn't create it
         if (info.passBalance > 0 && !info.isCreator) {
           purchased.push(info);
-        }
-        
-        // Add to created if user is the creator and not already in created list
-        if (info.isCreator && !createdExperiences.find(exp => exp.address === address)) {
-          setCreatedExperiences(prev => [...prev, info]);
         }
       } catch (err) {
         console.error('Failed to load known experience:', address, err);
