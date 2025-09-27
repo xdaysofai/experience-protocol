@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { createPublicClient, createWalletClient, custom, http, formatEther } from 'viem';
+import { createPublicClient, http, formatEther } from 'viem';
 import { sepolia } from 'viem/chains';
 import ExperienceAbi from '../../../../abi/Experience.json';
-import { getInjectedProvider } from '../../../../lib/provider';
+import { useWallet } from '../../../../contexts/WalletContext';
+import WalletButton from '../../../../components/WalletButton';
 
 const publicClient = createPublicClient({
   chain: sepolia,
@@ -31,8 +32,7 @@ async function buyWithEth({
 
 export default function BuyPage({ params }: { params: { address: string } }) {
   const experience = params.address as `0x${string}`;
-  const [wallet, setWallet] = useState<ReturnType<typeof createWalletClient> | null>(null);
-  const [account, setAccount] = useState<string>('');
+  const { account, wallet, isConnected, isWrongNetwork } = useWallet();
   const [priceEthWei, setPriceEthWei] = useState<bigint>(0n);
   const [cid, setCid] = useState<string>('');
   const [currentProposer, setCurrentProposer] = useState<string>('');

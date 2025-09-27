@@ -27,8 +27,8 @@ class LighthouseService {
   private apiKey: string | null = null;
   
   constructor() {
-    // You can set this via environment variable or user input
-    this.apiKey = process.env.NEXT_PUBLIC_LIGHTHOUSE_API_KEY || null;
+    // Set the platform API key
+    this.apiKey = process.env.NEXT_PUBLIC_LIGHTHOUSE_API_KEY || 'bc7f3123.5e11a21851e74fd3a1f8bbc6faa5eed0';
   }
 
   setApiKey(apiKey: string) {

@@ -1,10 +1,11 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { createPublicClient, createWalletClient, custom, http, formatEther } from 'viem';
+import { createPublicClient, http, formatEther } from 'viem';
 import { sepolia } from 'viem/chains';
-import { getInjectedProvider } from '../../lib/provider';
 import ExperienceAbi from '../../abi/Experience.json';
 import { lighthouseService, isLighthouseAvailable, promptForApiKey, ExperienceIndex } from '../../lib/lighthouse';
+import { useWallet } from '../../contexts/WalletContext';
+import WalletButton from '../../components/WalletButton';
 
 const publicClient = createPublicClient({
   chain: sepolia,
@@ -35,10 +36,9 @@ interface ExperienceInfo {
 }
 
 export default function CreatorDashboard() {
-  const [account, setAccount] = useState<string>('');
+  const { account, wallet, isConnected, isWrongNetwork } = useWallet();
   const [loading, setLoading] = useState<string>('');
   const [error, setError] = useState<string>('');
-  const [isWrongNetwork, setIsWrongNetwork] = useState<boolean>(false);
   
   const [createdExperiences, setCreatedExperiences] = useState<ExperienceInfo[]>([]);
   const [purchasedExperiences, setPurchasedExperiences] = useState<ExperienceInfo[]>([]);
@@ -59,70 +59,7 @@ export default function CreatorDashboard() {
   const [showLighthouseSetup, setShowLighthouseSetup] = useState<boolean>(false);
   const [lighthouseEnabled, setLighthouseEnabled] = useState<boolean>(false);
 
-  async function connectWallet() {
-    try {
-      setLoading('Connecting...');
-      setError('');
-      
-      const provider = await getInjectedProvider();
-      if (!provider) {
-        throw new Error('No wallet provider found. Please install MetaMask.');
-      }
-      
-      const accounts = await provider.request({ method: 'eth_requestAccounts' });
-      if (accounts.length > 0) {
-        setAccount(accounts[0]);
-        
-        // Check network
-        const chainId = await provider.request({ method: 'eth_chainId' });
-        setIsWrongNetwork(chainId !== '0xaa36a7');
-      }
-    } catch (err: any) {
-      setError('Failed to connect wallet: ' + (err.message || 'Unknown error'));
-    } finally {
-      setLoading('');
-    }
-  }
-
-  async function switchToSepolia() {
-    try {
-      const provider = await getInjectedProvider();
-      await provider.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0xaa36a7' }], // Sepolia chain ID in hex
-      });
-      setIsWrongNetwork(false);
-    } catch (switchError: any) {
-      if (switchError.code === 4902) {
-        // Chain not added to wallet, add it
-        try {
-          await provider.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: '0xaa36a7',
-              chainName: 'Sepolia Testnet',
-              rpcUrls: ['https://ethereum-sepolia-rpc.publicnode.com'],
-              nativeCurrency: {
-                name: 'Sepolia ETH',
-                symbol: 'ETH',
-                decimals: 18,
-              },
-              blockExplorerUrls: ['https://sepolia.etherscan.io'],
-            }],
-          });
-          setIsWrongNetwork(false);
-        } catch (addError) {
-          setError('Failed to add Sepolia network');
-        }
-      } else {
-        setError('Failed to switch to Sepolia network');
-      }
-    }
-  }
-
-  function disconnectWallet() {
-    setAccount('');
-    setIsWrongNetwork(false);
+  function clearExperiences() {
     setCreatedExperiences([]);
     setPurchasedExperiences([]);
   }
@@ -298,16 +235,10 @@ export default function CreatorDashboard() {
   }
 
   async function updatePrice(experienceAddress: string, newPriceEth: string) {
-    if (!account) return;
+    if (!account || !wallet) return;
     
     try {
       setLoading('Updating price...');
-      
-      const provider = await getInjectedProvider();
-      const walletClient = createWalletClient({ 
-        chain: sepolia, 
-        transport: custom(provider) 
-      });
 
       const priceWei = BigInt(Math.floor(parseFloat(newPriceEth) * 1e18));
       
@@ -319,7 +250,7 @@ export default function CreatorDashboard() {
         account: account as `0x${string}`,
       });
 
-      const hash = await walletClient.writeContract(request);
+      const hash = await wallet.writeContract(request);
       await publicClient.waitForTransactionReceipt({ hash });
       
       // Refresh the experience data
@@ -335,16 +266,10 @@ export default function CreatorDashboard() {
   }
 
   async function updateCid(experienceAddress: string, newCid: string) {
-    if (!account) return;
+    if (!account || !wallet) return;
     
     try {
       setLoading('Updating content...');
-      
-      const provider = await getInjectedProvider();
-      const walletClient = createWalletClient({ 
-        chain: sepolia, 
-        transport: custom(provider) 
-      });
 
       const { request } = await publicClient.simulateContract({
         address: experienceAddress as `0x${string}`,
@@ -354,7 +279,7 @@ export default function CreatorDashboard() {
         account: account as `0x${string}`,
       });
 
-      const hash = await walletClient.writeContract(request);
+      const hash = await wallet.writeContract(request);
       await publicClient.waitForTransactionReceipt({ hash });
       
       // Refresh the experience data
@@ -370,16 +295,10 @@ export default function CreatorDashboard() {
   }
 
   async function updateProposer(experienceAddress: string, newProposer: string) {
-    if (!account) return;
+    if (!account || !wallet) return;
     
     try {
       setLoading('Updating proposer...');
-      
-      const provider = await getInjectedProvider();
-      const walletClient = createWalletClient({ 
-        chain: sepolia, 
-        transport: custom(provider) 
-      });
 
       const { request } = await publicClient.simulateContract({
         address: experienceAddress as `0x${string}`,
@@ -389,7 +308,7 @@ export default function CreatorDashboard() {
         account: account as `0x${string}`,
       });
 
-      const hash = await walletClient.writeContract(request);
+      const hash = await wallet.writeContract(request);
       await publicClient.waitForTransactionReceipt({ hash });
       
       // Refresh the experience data
@@ -446,11 +365,13 @@ export default function CreatorDashboard() {
   }
 
   useEffect(() => {
-    if (account && !isWrongNetwork) {
+    if (isConnected && !isWrongNetwork) {
       checkLighthouseSetup();
       loadExperiences();
+    } else if (!isConnected) {
+      clearExperiences();
     }
-  }, [account, isWrongNetwork]);
+  }, [isConnected, isWrongNetwork, account]);
 
   async function checkLighthouseSetup() {
     if (!account) return;
@@ -728,75 +649,11 @@ export default function CreatorDashboard() {
         </div>
         
         {/* Wallet Status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {account ? (
-            <>
-              <div style={{
-                padding: '8px 16px',
-                backgroundColor: '#10b981',
-                color: 'white',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: '500'
-              }}>
-                🟢 {account.slice(0, 6)}...{account.slice(-4)}
-              </div>
-              {isWrongNetwork && (
-                <button 
-                  onClick={switchToSepolia}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#f59e0b',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    cursor: 'pointer'
-                  }}
-                >
-                  📡 Switch to Sepolia
-                </button>
-              )}
-              <button 
-                onClick={disconnectWallet}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#6b7280',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  cursor: 'pointer'
-                }}
-              >
-                Disconnect
-              </button>
-            </>
-          ) : (
-            <button 
-              onClick={connectWallet}
-              disabled={loading !== ''}
-              style={{
-                padding: '12px 24px',
-                backgroundColor: loading !== '' ? '#9ca3af' : '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '16px',
-                cursor: loading !== '' ? 'not-allowed' : 'pointer',
-                fontWeight: '600'
-              }}
-            >
-              {loading || 'Connect Wallet'}
-            </button>
-          )}
-        </div>
+        <WalletButton size="md" />
       </div>
 
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-        {!account ? (
+        {!isConnected ? (
           <div style={{
             textAlign: 'center',
             padding: '60px 20px',
@@ -823,21 +680,7 @@ export default function CreatorDashboard() {
             <p style={{ margin: '0 0 20px 0', color: '#6b7280' }}>
               Please switch to Sepolia testnet to continue
             </p>
-            <button 
-              onClick={switchToSepolia}
-              style={{
-                padding: '12px 24px',
-                backgroundColor: '#f59e0b',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '16px',
-                fontWeight: '600',
-                cursor: 'pointer'
-              }}
-            >
-              📡 Switch to Sepolia
-            </button>
+            <WalletButton size="lg" />
           </div>
         ) : (
           <>
