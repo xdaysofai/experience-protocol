@@ -44,21 +44,37 @@ export default function BuyPage({ params }: { params: { address: `0x${string}` }
     if (typeof window !== "undefined" && (window as any).ethereum) {
       const w = createWalletClient({ chain, transport: custom((window as any).ethereum) });
       setWallet(w);
-      (async () => {
-        const [acc] = await (window as any).ethereum.request({ method: "eth_requestAccounts" });
-        setAccount(acc);
-      })();
     }
   }, []);
+
+  async function connectWallet() {
+    if (!wallet) return setStatus("MetaMask not detected");
+    try {
+      const [acc] = await (window as any).ethereum.request({ method: "eth_requestAccounts" });
+      setAccount(acc);
+      setStatus("Wallet connected: " + acc.slice(0,6) + "..." + acc.slice(-4));
+    } catch (error) {
+      setStatus("Failed to connect wallet: " + (error as Error).message);
+    }
+  }
 
   useEffect(() => {
     (async () => {
       if (!selected) return;
-      const allowed = await pub.readContract({ address: exp, abi: expAbi, functionName: "allowedToken", args: [selected as `0x${string}`] });
-      const p = await pub.readContract({ address: exp, abi: expAbi, functionName: "priceByToken", args: [selected as `0x${string}`] }) as bigint;
-      setPrice(allowed ? p : 0n);
-      const dec = await pub.readContract({ address: selected as `0x${string}`, abi: erc20Abi, functionName: "decimals" }) as number;
-      setDecimals(dec);
+      try {
+        const allowed = await pub.readContract({ address: exp, abi: expAbi, functionName: "allowedToken", args: [selected as `0x${string}`] });
+        const p = await pub.readContract({ address: exp, abi: expAbi, functionName: "priceByToken", args: [selected as `0x${string}`] }) as bigint;
+        setPrice(allowed ? p : 0n);
+        try {
+          const dec = await pub.readContract({ address: selected as `0x${string}`, abi: erc20Abi, functionName: "decimals" }) as number;
+          setDecimals(dec);
+        } catch {
+          setDecimals(18); // fallback
+        }
+      } catch (error) {
+        setStatus("Error reading contract: " + (error as Error).message);
+        setPrice(0n);
+      }
     })();
   }, [selected, exp]);
 
@@ -93,6 +109,18 @@ export default function BuyPage({ params }: { params: { address: `0x${string}` }
       <h2>Buy Access</h2>
       <div><strong>Experience:</strong> {exp}</div>
 
+      {!account ? (
+        <div>
+          <button onClick={connectWallet} style={{padding: '12px 24px', fontSize: '16px', marginBottom: '20px'}}>
+            Connect MetaMask Wallet
+          </button>
+        </div>
+      ) : (
+        <div style={{marginBottom: '20px', padding: '10px', backgroundColor: '#f0f0f0', borderRadius: '5px'}}>
+          <strong>Connected:</strong> {account.slice(0,6)}...{account.slice(-4)}
+        </div>
+      )}
+
       <label>Token</label>
       <select value={selected} onChange={e=>setSelected(e.target.value)}>
         {TOKENS.map(t => <option key={t.addr} value={t.addr}>{t.sym} — {t.addr}</option>)}
@@ -104,8 +132,10 @@ export default function BuyPage({ params }: { params: { address: `0x${string}` }
       <p>Unit price (raw): {price?.toString() ?? "-"}</p>
       <p>Total (raw): {total.toString()} (decimals {decimals})</p>
 
-      <button onClick={doApproveAndBuy}>Approve → Buy</button>
-      <p>{status}</p>
+      <button onClick={doApproveAndBuy} disabled={!account}>
+        {!account ? "Connect Wallet First" : "Approve → Buy"}
+      </button>
+      <p style={{color: status.includes('Error') ? 'red' : 'black'}}>{status}</p>
     </main>
   );
 }
