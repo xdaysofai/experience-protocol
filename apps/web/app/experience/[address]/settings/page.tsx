@@ -49,22 +49,40 @@ export default function SettingsPage({ params }: { params: { address: `0x${strin
   const [savingIndex, setSavingIndex] = useState<number>(-1);
 
   const connectWallet = async () => {
-    if (typeof window !== "undefined" && (window as any).ethereum) {
-      try {
-        setLoading('Connecting wallet...');
-        const w = createWalletClient({ chain, transport: custom((window as any).ethereum) });
-        setWallet(w);
-        const [acc] = await (window as any).ethereum.request({ method: "eth_requestAccounts" });
-        setAccount(acc);
-        setSuccess('Wallet connected successfully!');
-        setError('');
-      } catch (err: any) {
-        setError('Failed to connect wallet: ' + err.message);
-      } finally {
-        setLoading('');
+    if (typeof window === "undefined" || !(window as any).ethereum) {
+      return setError("MetaMask not detected. Please install MetaMask.");
+    }
+
+    try {
+      setLoading("Connecting wallet...");
+      setError("");
+      
+      // Request account access
+      const accounts = await (window as any).ethereum.request({ 
+        method: "eth_requestAccounts" 
+      });
+      
+      if (accounts.length === 0) {
+        throw new Error("No accounts found");
       }
-    } else {
-      setError('MetaMask not found. Please install MetaMask.');
+
+      const account = accounts[0];
+      setAccount(account);
+      
+      // Create wallet client after successful connection
+      const w = createWalletClient({ 
+        chain, 
+        transport: custom((window as any).ethereum) 
+      });
+      setWallet(w);
+      
+      setSuccess("Wallet connected successfully!");
+      setTimeout(() => setSuccess(""), 3000); // Clear success message after 3 seconds
+    } catch (err: any) {
+      console.error("Wallet connection error:", err);
+      setError("Failed to connect wallet: " + (err.message || "Unknown error"));
+    } finally {
+      setLoading("");
     }
   };
 
