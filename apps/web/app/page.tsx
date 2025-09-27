@@ -32,27 +32,14 @@ export default function HomePage() {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
-            {EXPERIENCE_ADDRESS ? (
-              <Link href={`/experience/${EXPERIENCE_ADDRESS}/buy`}>
-                <Button size="lg" className="w-full sm:w-auto">
-                  🎫 Buy Access Pass
-                </Button>
-              </Link>
-            ) : (
-              <Link href="/creator">
-                <Button size="lg" className="w-full sm:w-auto">
-                  🎨 Create First Experience
-                </Button>
-              </Link>
-            )}
-            <Link href="/creator">
-              <Button variant="secondary" size="lg" className="w-full sm:w-auto">
-                🎨 Creator Dashboard
+            <Link href="/experience">
+              <Button size="lg" className="w-full sm:w-auto">
+                🔍 Look for Experience
               </Button>
             </Link>
-            <Link href="/governance">
+            <Link href="/creator">
               <Button variant="secondary" size="lg" className="w-full sm:w-auto">
-                🗳️ Governance
+                🎨 Create Experience
               </Button>
             </Link>
           </div>
@@ -213,22 +200,14 @@ export default function HomePage() {
               Join the Experience Protocol and start creating token-gated experiences today.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              {EXPERIENCE_ADDRESS ? (
-                <Link href={`/experience/${EXPERIENCE_ADDRESS}/buy`}>
-                  <Button size="lg" className="w-full sm:w-auto">
-                    Buy Access Pass
-                  </Button>
-                </Link>
-              ) : (
-                <Link href="/creator">
-                  <Button size="lg" className="w-full sm:w-auto">
-                    Create First Experience
-                  </Button>
-                </Link>
-              )}
+              <Link href="/experience">
+                <Button size="lg" className="w-full sm:w-auto">
+                  🔍 Look for Experience
+                </Button>
+              </Link>
               <Link href="/creator">
                 <Button variant="secondary" size="lg" className="w-full sm:w-auto">
-                  Create Experience
+                  🎨 Create Experience
                 </Button>
               </Link>
             </div>
