@@ -6,12 +6,16 @@
     "i": "pnpm install",
     "build": "pnpm -C contracts build && pnpm -C apps/web build",
     "dev:web": "pnpm -C apps/web dev",
-    "dev:relayer": "pnpm -C apps/relayer dev"
+    "dev:relayer": "pnpm -C apps/relayer dev",
+    "test:chrome": "node test-experience.js"
   },
   "workspaces": [
     "contracts",
     "apps/web",
     "apps/relayer",
     "packages/sdk"
-  ]
+  ],
+  "devDependencies": {
+    "selenium-webdriver": "^4.35.0"
+  }
 }
