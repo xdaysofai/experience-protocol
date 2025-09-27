@@ -8,7 +8,10 @@ import WalletButton from '../../../../components/WalletButton';
 
 const publicClient = createPublicClient({
   chain: sepolia,
-  transport: http(process.env.NEXT_PUBLIC_RPC || 'https://rpc.sepolia.org'),
+  transport: http(process.env.NEXT_PUBLIC_RPC || 'https://ethereum-sepolia-rpc.publicnode.com', {
+    timeout: 10_000, // 10 second timeout
+    retryCount: 2,
+  }),
 });
 
 export default function BuyPage({ params }: { params: { address: string } }) {
@@ -25,6 +28,15 @@ export default function BuyPage({ params }: { params: { address: string } }) {
   const [passBalance, setPassBalance] = useState<bigint>(0n);
   const [showContent, setShowContent] = useState<boolean>(false);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // Clear any pending timeouts or async operations
+      setLoading('');
+      setError('');
+    };
+  }, []);
+
   useEffect(() => {
     loadContractData();
   }, [experience]);
@@ -38,8 +50,14 @@ export default function BuyPage({ params }: { params: { address: string } }) {
   async function loadContractData() {
     try {
       setLoading('Loading contract data...');
+      setError('');
       
-      const [price, cidResult, proposer, ownerResult] = await Promise.all([
+      // Add timeout wrapper to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Contract data loading timeout')), 8000)
+      );
+
+      const dataPromise = Promise.all([
         publicClient.readContract({
           address: experience,
           abi: ExperienceAbi.abi,
@@ -62,14 +80,29 @@ export default function BuyPage({ params }: { params: { address: string } }) {
         }),
       ]);
 
-      setPriceEthWei(price as bigint);
-      setCid(cidResult as string);
-      setCurrentProposer(proposer as string);
-      setOwner(ownerResult as string);
+      const [price, cidResult, proposer, ownerResult] = await Promise.race([
+        dataPromise,
+        timeoutPromise
+      ]) as [bigint, string, string, string];
+
+      setPriceEthWei(price);
+      setCid(cidResult);
+      setCurrentProposer(proposer);
+      setOwner(ownerResult);
 
     } catch (err: any) {
       console.error('Failed to load contract data:', err);
-      setError('Failed to load experience data: ' + err.message);
+      
+      // Handle specific error types
+      if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+        setError('Network request was cancelled. Please try refreshing the page.');
+      } else if (err.message?.includes('timeout')) {
+        setError('Request timed out. Please check your network connection and try again.');
+      } else if (err.message?.includes('Contract read failed')) {
+        setError('Invalid experience contract. Please verify the contract address.');
+      } else {
+        setError('Failed to load experience data: ' + (err.shortMessage || err.message));
+      }
     } finally {
       setLoading('');
     }
@@ -79,17 +112,33 @@ export default function BuyPage({ params }: { params: { address: string } }) {
     if (!account) return;
     
     try {
-      const balance = await publicClient.readContract({
+      // Add timeout for balance loading too
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Balance loading timeout')), 5000)
+      );
+
+      const balancePromise = publicClient.readContract({
         address: experience,
         abi: ExperienceAbi.abi,
         functionName: 'balanceOf',
         args: [account as `0x${string}`, 1n], // PASS_ID = 1
       });
+
+      const balance = await Promise.race([
+        balancePromise,
+        timeoutPromise
+      ]) as bigint;
       
-      setPassBalance(balance as bigint);
+      setPassBalance(balance);
       setShowContent(balance > 0n);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load pass balance:', err);
+      // Don't show error for balance loading failure, just log it
+      if (err.name !== 'AbortError' && !err.message?.includes('timeout')) {
+        console.warn('Balance check failed, assuming no passes:', err.message);
+      }
+      setPassBalance(0n);
+      setShowContent(false);
     }
   }
 
@@ -276,9 +325,9 @@ export default function BuyPage({ params }: { params: { address: string } }) {
                       <p style={{ margin: '8px 0 0 0', color: '#6b7280', fontSize: '14px' }}>
                         This is your token-gated content. Only pass holders can see this!
                       </p>
-                    </div>
-                  )}
-                </div>
+            </div>
+          )}
+            </div>
               </div>
             ) : (
               <div style={{
@@ -294,7 +343,7 @@ export default function BuyPage({ params }: { params: { address: string } }) {
                   <p style={{ margin: '0', fontSize: '18px', color: '#6b7280' }}>
                     Purchase an exclusive soulbound NFT pass to access this experience
                   </p>
-                </div>
+            </div>
 
                 {/* Experience Details */}
                 <div style={{
@@ -316,7 +365,7 @@ export default function BuyPage({ params }: { params: { address: string } }) {
                     <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '14px' }}>
                       per access pass
                     </p>
-                  </div>
+                    </div>
 
                   <div style={{
                     padding: '20px',
@@ -335,7 +384,7 @@ export default function BuyPage({ params }: { params: { address: string } }) {
                       {owner}
                     </p>
                   </div>
-                </div>
+                    </div>
 
                 {/* Purchase Form */}
                 <div style={{
@@ -353,14 +402,14 @@ export default function BuyPage({ params }: { params: { address: string } }) {
                       fontWeight: '500',
                       color: '#374151'
                     }}>
-                      Quantity
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="10"
-                      value={qty}
-                      onChange={(e) => setQty(parseInt(e.target.value) || 1)}
+                        Quantity
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={qty}
+                        onChange={(e) => setQty(parseInt(e.target.value) || 1)}
                       style={{
                         width: '100%',
                         padding: '12px',
@@ -368,8 +417,8 @@ export default function BuyPage({ params }: { params: { address: string } }) {
                         borderRadius: '8px',
                         fontSize: '16px'
                       }}
-                    />
-                  </div>
+                      />
+                    </div>
 
                   <div style={{ 
                     padding: '16px',
@@ -391,8 +440,8 @@ export default function BuyPage({ params }: { params: { address: string } }) {
                       }}>
                         {formatEther(priceEthWei * BigInt(qty))} ETH
                       </span>
-                    </div>
-                  </div>
+                            </div>
+                          </div>
 
                   {error && (
                     <div style={{
@@ -402,9 +451,28 @@ export default function BuyPage({ params }: { params: { address: string } }) {
                       border: '1px solid #fca5a5',
                       marginBottom: '20px'
                     }}>
-                      <p style={{ margin: '0', color: '#dc2626', fontSize: '14px' }}>
+                      <p style={{ margin: '0 0 8px 0', color: '#dc2626', fontSize: '14px' }}>
                         ❌ {error}
                       </p>
+                      {(error.includes('timeout') || error.includes('aborted') || error.includes('cancelled')) && (
+                        <button
+                          onClick={() => {
+                            setError('');
+                            loadContractData();
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#dc2626',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🔄 Retry
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -428,9 +496,9 @@ export default function BuyPage({ params }: { params: { address: string } }) {
                         </a>
                       </p>
                     </div>
-                  )}
-
-                  <button
+                      )}
+                      
+                      <button
                     onClick={handleBuy}
                     disabled={loading !== '' || priceEthWei === 0n}
                     style={{
@@ -447,8 +515,8 @@ export default function BuyPage({ params }: { params: { address: string } }) {
                     }}
                   >
                     {loading || `🎫 Buy ${qty} Access Pass${qty > 1 ? 'es' : ''}`}
-                  </button>
-                </div>
+                      </button>
+              </div>
 
                 {/* Info */}
                 <div style={{
@@ -469,8 +537,8 @@ export default function BuyPage({ params }: { params: { address: string } }) {
               </div>
             )}
           </>
-        )}
-      </div>
+          )}
+        </div>
     </div>
   );
 }
