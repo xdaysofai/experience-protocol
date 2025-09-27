@@ -214,20 +214,36 @@ export default function ExperienceDashboard() {
           <h1 style={{ margin: 0, color: '#1e293b', fontSize: '24px', fontWeight: '600' }}>
             🎫 My Experiences
           </h1>
-          <a 
-            href="/create"
-            style={{
-              padding: '12px 20px',
-              backgroundColor: '#10b981',
-              color: 'white',
-              textDecoration: 'none',
-              borderRadius: '8px',
-              fontSize: '16px',
-              fontWeight: '600'
-            }}
-          >
-            🌍 Create New Experience
-          </a>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <a 
+              href="/creator"
+              style={{
+                padding: '12px 20px',
+                backgroundColor: '#f59e0b',
+                color: 'white',
+                textDecoration: 'none',
+                borderRadius: '8px',
+                fontSize: '16px',
+                fontWeight: '600'
+              }}
+            >
+              🎨 Creator Dashboard
+            </a>
+            <a 
+              href="/create"
+              style={{
+                padding: '12px 20px',
+                backgroundColor: '#10b981',
+                color: 'white',
+                textDecoration: 'none',
+                borderRadius: '8px',
+                fontSize: '16px',
+                fontWeight: '600'
+              }}
+            >
+              🌍 Create New Experience
+            </a>
+          </div>
         </div>
         
         {/* Wallet Status */}

@@ -30,6 +30,12 @@ export default function HomePage() {
                   🎫 Buy Access Pass
                 </Link>
                 <Link 
+                  href="/creator"
+                  className="bg-amber-500 hover:bg-amber-600 text-white font-bold py-4 px-8 rounded-lg transition-colors duration-200 text-lg inline-block"
+                >
+                  🎨 Creator Dashboard
+                </Link>
+                <Link 
                   href="/create"
                   className="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-8 rounded-lg transition-colors duration-200 text-lg inline-block"
                 >
@@ -39,7 +45,7 @@ export default function HomePage() {
                   href="/experience"
                   className="btn-secondary text-lg px-8 py-4 inline-block"
                 >
-                  📊 My Dashboard
+                  📊 My Passes
                 </Link>
               </div>
             </div>

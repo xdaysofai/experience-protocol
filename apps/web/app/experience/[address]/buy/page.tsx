@@ -304,34 +304,48 @@ export default function BuyPage({ params }: { params: { address: string } }) {
           <h1 style={{ margin: 0, color: '#1e293b', fontSize: '24px', fontWeight: '600' }}>
             🎫 Buy Experience Pass
           </h1>
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <a 
               href="/experience"
               style={{
-                padding: '8px 16px',
+                padding: '6px 12px',
                 backgroundColor: '#6366f1',
                 color: 'white',
                 textDecoration: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
+                borderRadius: '6px',
+                fontSize: '12px',
                 fontWeight: '500'
               }}
             >
-              📊 My Dashboard
+              📊 My Passes
+            </a>
+            <a 
+              href="/creator"
+              style={{
+                padding: '6px 12px',
+                backgroundColor: '#f59e0b',
+                color: 'white',
+                textDecoration: 'none',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: '500'
+              }}
+            >
+              🎨 Creator Hub
             </a>
             <a 
               href="/create"
               style={{
-                padding: '8px 16px',
+                padding: '6px 12px',
                 backgroundColor: '#10b981',
                 color: 'white',
                 textDecoration: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
+                borderRadius: '6px',
+                fontSize: '12px',
                 fontWeight: '500'
               }}
             >
-              🌍 Create Experience
+              🌍 Create New
             </a>
           </div>
           </div>
