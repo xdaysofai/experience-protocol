@@ -34,7 +34,14 @@ export default function DebugPage() {
 
   async function checkExperience(address: string): Promise<ExperienceResult> {
     try {
-      const [owner, cid, priceEthWei, passBalance] = await Promise.all([
+      console.log(`🔍 Checking experience: ${address}`);
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout after 10 seconds')), 10000)
+      );
+
+      const dataPromise = Promise.all([
         publicClient.readContract({
           address: address as `0x${string}`,
           abi: ExperienceAbi.abi,
@@ -57,6 +64,11 @@ export default function DebugPage() {
           args: [account as `0x${string}`, 1n],
         }) : 0n,
       ]);
+
+      const [owner, cid, priceEthWei, passBalance] = await Promise.race([
+        dataPromise,
+        timeoutPromise
+      ]) as [string, string, bigint, bigint];
 
       return {
         address,
