@@ -48,6 +48,10 @@ export default function CreatorDashboard() {
   const [editPrice, setEditPrice] = useState<string>('');
   const [editCid, setEditCid] = useState<string>('');
   const [editProposer, setEditProposer] = useState<string>('');
+  
+  // Manual experience addition
+  const [showAddExperience, setShowAddExperience] = useState<boolean>(false);
+  const [manualAddress, setManualAddress] = useState<string>('');
 
   async function connectWallet() {
     try {
@@ -130,27 +134,15 @@ export default function CreatorDashboard() {
         return;
       }
 
-      // Get creation events for this user
-      const creationLogs = await publicClient.getLogs({
-        address: factoryAddress,
-        event: factoryAbi[0],
-        args: {
-          creator: account as `0x${string}`
-        },
-        fromBlock: 'earliest',
-        toBlock: 'latest',
-      });
-
-      const created: ExperienceInfo[] = [];
-      for (const log of creationLogs) {
-        if (log.args.experience) {
-          try {
-            const info = await getExperienceInfo(log.args.experience, account);
-            created.push(info);
-          } catch (err) {
-            console.error('Failed to load created experience:', log.args.experience, err);
-          }
-        }
+      // Try to get creation events with chunked approach to avoid RPC limits
+      let created: ExperienceInfo[] = [];
+      try {
+        created = await loadCreatedExperiencesChunked(factoryAddress, account);
+        console.log(`Found ${created.length} created experiences from factory events`);
+      } catch (err: any) {
+        console.error('Factory log query failed:', err);
+        console.log('Falling back to known experiences only');
+        // Don't show error to user for factory failures, just use fallback
       }
 
       setCreatedExperiences(created);
@@ -166,12 +158,60 @@ export default function CreatorDashboard() {
     }
   }
 
+  async function loadCreatedExperiencesChunked(factoryAddress: `0x${string}`, userAccount: string): Promise<ExperienceInfo[]> {
+    const created: ExperienceInfo[] = [];
+    
+    try {
+      // Get latest block number
+      const latestBlock = await publicClient.getBlockNumber();
+      const chunkSize = 10000n; // Smaller chunks to avoid RPC limits
+      
+      // Start from a recent block to catch newer deployments (last ~30 days)
+      const startBlock = latestBlock > 50000n ? latestBlock - 50000n : 0n;
+      
+      for (let fromBlock = startBlock; fromBlock <= latestBlock; fromBlock += chunkSize) {
+        const toBlock = fromBlock + chunkSize - 1n > latestBlock ? latestBlock : fromBlock + chunkSize - 1n;
+        
+        try {
+          const creationLogs = await publicClient.getLogs({
+            address: factoryAddress,
+            event: factoryAbi[0],
+            args: {
+              creator: userAccount as `0x${string}`
+            },
+            fromBlock: fromBlock,
+            toBlock: toBlock,
+          });
+
+          for (const log of creationLogs) {
+            if (log.args.experience) {
+              try {
+                const info = await getExperienceInfo(log.args.experience, userAccount);
+                created.push(info);
+              } catch (err) {
+                console.error('Failed to load created experience:', log.args.experience, err);
+              }
+            }
+          }
+        } catch (chunkErr: any) {
+          console.error(`Failed to load chunk ${fromBlock}-${toBlock}:`, chunkErr);
+          // Continue with next chunk
+        }
+      }
+    } catch (err: any) {
+      console.error('Chunked loading failed:', err);
+      throw err;
+    }
+    
+    return created;
+  }
+
   async function loadKnownExperiences() {
-    // Known experiences that users might have purchased
+    // Known experiences that users might have purchased or created
     const knownExperiences = [
       '0x5455558b5ca1E0622d63857d15a7cBcE5eE1322A',
       '0xBA0182EEfF04A8d7BAA04Afcc4BBCd0ac74Ce88F',
-      // Add more known experience addresses here
+      // Add more known experience addresses here as they are deployed
     ];
 
     const purchased: ExperienceInfo[] = [];
@@ -329,6 +369,45 @@ export default function CreatorDashboard() {
       
     } catch (err: any) {
       setError('Failed to update proposer: ' + err.message);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function addManualExperience() {
+    if (!manualAddress || !account) return;
+    
+    try {
+      setLoading('Adding experience...');
+      
+      // Validate address format
+      if (!manualAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+        setError('Invalid contract address format');
+        return;
+      }
+      
+      // Check if already in the list
+      if (createdExperiences.find(exp => exp.address.toLowerCase() === manualAddress.toLowerCase())) {
+        setError('Experience already in your list');
+        return;
+      }
+      
+      const info = await getExperienceInfo(manualAddress, account);
+      
+      if (info.isCreator) {
+        setCreatedExperiences(prev => [...prev, info]);
+      } else if (info.isOwned) {
+        setPurchasedExperiences(prev => [...prev, info]);
+      } else {
+        setError('You are not the creator or owner of this experience');
+        return;
+      }
+      
+      setManualAddress('');
+      setShowAddExperience(false);
+      
+    } catch (err: any) {
+      setError('Failed to add experience: ' + err.message);
     } finally {
       setLoading('');
     }
@@ -678,9 +757,26 @@ export default function CreatorDashboard() {
             }}>
               {activeTab === 'created' ? (
                 <div>
-                  <h2 style={{ margin: '0 0 20px 0', color: '#1e293b' }}>
-                    Your Created Experiences
-                  </h2>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <h2 style={{ margin: 0, color: '#1e293b' }}>
+                      Your Created Experiences
+                    </h2>
+                    <button
+                      onClick={() => setShowAddExperience(true)}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: '#6366f1',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      + Add Experience
+                    </button>
+                  </div>
                   
                   {createdExperiences.length === 0 ? (
                     <div style={{
@@ -751,6 +847,94 @@ export default function CreatorDashboard() {
               )}
             </div>
           </>
+        )}
+
+        {/* Add Experience Modal */}
+        {showAddExperience && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }}>
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '24px',
+              maxWidth: '500px',
+              width: '100%'
+            }}>
+              <h3 style={{ margin: '0 0 16px 0', color: '#1e293b' }}>
+                Add Experience Contract
+              </h3>
+              <p style={{ margin: '0 0 20px 0', color: '#6b7280', fontSize: '14px' }}>
+                Enter the contract address of an experience you created or own passes for.
+              </p>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                  Contract Address
+                </label>
+                <input
+                  type="text"
+                  value={manualAddress}
+                  onChange={(e) => setManualAddress(e.target.value)}
+                  placeholder="0x..."
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '6px',
+                    fontFamily: 'monospace'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={addManualExperience}
+                  disabled={!manualAddress || loading !== ''}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    backgroundColor: !manualAddress || loading !== '' ? '#9ca3af' : '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: '500',
+                    cursor: !manualAddress || loading !== '' ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {loading || 'Add Experience'}
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setShowAddExperience(false);
+                    setManualAddress('');
+                  }}
+                  style={{
+                    padding: '12px 16px',
+                    backgroundColor: '#6b7280',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: '500',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Quick Edit Modal */}
