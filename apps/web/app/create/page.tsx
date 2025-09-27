@@ -24,40 +24,26 @@ const factoryAbi = [
   }
 ] as const;
 
-interface Hotel {
+interface ExperienceItem {
+  id: string;
+  category: string;
   name: string;
+  description?: string;
   address?: string;
   phoneNumber?: string;
+  website?: string;
+  priceRange?: string;
+  duration?: string;
+  difficulty?: 'easy' | 'moderate' | 'hard';
+  ageRestriction?: string;
+  groupSize?: string;
+  bookingRequired?: boolean;
+  operatingHours?: string;
+  seasonality?: string;
+  specialRequirements?: string;
   geoLocation?: { lat: string; lng: string };
-  priceRange?: string;
-  amenities?: string[];
-}
-
-interface Shopping {
-  name: string;
-  category: 'clothes' | 'art' | 'crafts' | 'souvenirs' | 'electronics' | 'books' | 'other';
-  address?: string;
-  description?: string;
-  priceRange?: string;
-}
-
-interface Food {
-  name: string;
-  cuisine: 'street' | 'local' | 'international' | 'fine-dining' | 'cafe' | 'other';
-  dietaryType: 'veg' | 'non-veg' | 'vegan' | 'mixed';
-  address?: string;
-  specialties?: string[];
-  priceRange?: string;
-}
-
-interface Transport {
-  type: 'walking' | 'taxi' | 'bus' | 'train' | 'metro' | 'bike' | 'car' | 'boat' | 'flight' | 'other';
-  description: string;
-  fromLocation?: string;
-  toLocation?: string;
-  estimatedCost?: string;
-  estimatedTime?: string;
-  bookingInfo?: string;
+  images?: string[];
+  tags?: string[];
 }
 
 interface ExperienceData {
@@ -66,15 +52,27 @@ interface ExperienceData {
   location: string;
   duration: string;
   difficulty: 'easy' | 'moderate' | 'challenging';
-  category: 'cultural' | 'adventure' | 'relaxation' | 'culinary' | 'nightlife' | 'nature' | 'shopping' | 'other';
   pricePerPass: string;
   maxParticipants?: string;
-  hotels: Hotel[];
-  shopping: Shopping[];
-  food: Food[];
-  transport: Transport[];
+  items: ExperienceItem[];
   additionalNotes?: string;
+  categories: string[];
 }
+
+const EXPERIENCE_CATEGORIES = [
+  'Attraction Tickets',
+  'Tours', 
+  'Adventure',
+  'Water Activities',
+  'Cruises',
+  'Nature & Wildlife',
+  'Entertainment & Shows',
+  'Transportation',
+  'Food & Drink',
+  'Aerial Sightseeing',
+  'Travel Services',
+  'Wellness'
+];
 
 export default function CreateExperience() {
   const [account, setAccount] = useState<string>('');
@@ -89,20 +87,15 @@ export default function CreateExperience() {
     location: '',
     duration: '',
     difficulty: 'moderate',
-    category: 'cultural',
     pricePerPass: '0.01',
-    hotels: [],
-    shopping: [],
-    food: [],
-    transport: [],
+    items: [],
+    categories: [],
   });
 
   const steps = [
     'Basic Info',
-    'Hotels & Accommodation', 
-    'Shopping & Shopping',
-    'Food & Dining',
-    'Transport & Logistics',
+    'Choose Categories',
+    'Add Experience Items',
     'Review & Deploy'
   ];
 
@@ -122,95 +115,42 @@ export default function CreateExperience() {
     }
   }
 
-  function addHotel() {
+  function toggleCategory(category: string) {
     setExperienceData(prev => ({
       ...prev,
-      hotels: [...prev.hotels, { name: '', amenities: [] }]
+      categories: prev.categories.includes(category)
+        ? prev.categories.filter(c => c !== category)
+        : [...prev.categories, category]
     }));
   }
 
-  function updateHotel(index: number, field: keyof Hotel, value: any) {
+  function addExperienceItem(category: string) {
+    const newItem: ExperienceItem = {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      category,
+      name: '',
+      tags: []
+    };
+    
     setExperienceData(prev => ({
       ...prev,
-      hotels: prev.hotels.map((hotel, i) => 
-        i === index ? { ...hotel, [field]: value } : hotel
+      items: [...prev.items, newItem]
+    }));
+  }
+
+  function updateExperienceItem(id: string, field: keyof ExperienceItem, value: any) {
+    setExperienceData(prev => ({
+      ...prev,
+      items: prev.items.map(item => 
+        item.id === id ? { ...item, [field]: value } : item
       )
     }));
   }
 
-  function removeHotel(index: number) {
+  function removeExperienceItem(id: string) {
     setExperienceData(prev => ({
       ...prev,
-      hotels: prev.hotels.filter((_, i) => i !== index)
-    }));
-  }
-
-  function addShopping() {
-    setExperienceData(prev => ({
-      ...prev,
-      shopping: [...prev.shopping, { name: '', category: 'other' }]
-    }));
-  }
-
-  function updateShopping(index: number, field: keyof Shopping, value: any) {
-    setExperienceData(prev => ({
-      ...prev,
-      shopping: prev.shopping.map((shop, i) => 
-        i === index ? { ...shop, [field]: value } : shop
-      )
-    }));
-  }
-
-  function removeShopping(index: number) {
-    setExperienceData(prev => ({
-      ...prev,
-      shopping: prev.shopping.filter((_, i) => i !== index)
-    }));
-  }
-
-  function addFood() {
-    setExperienceData(prev => ({
-      ...prev,
-      food: [...prev.food, { name: '', cuisine: 'local', dietaryType: 'mixed', specialties: [] }]
-    }));
-  }
-
-  function updateFood(index: number, field: keyof Food, value: any) {
-    setExperienceData(prev => ({
-      ...prev,
-      food: prev.food.map((food, i) => 
-        i === index ? { ...food, [field]: value } : food
-      )
-    }));
-  }
-
-  function removeFood(index: number) {
-    setExperienceData(prev => ({
-      ...prev,
-      food: prev.food.filter((_, i) => i !== index)
-    }));
-  }
-
-  function addTransport() {
-    setExperienceData(prev => ({
-      ...prev,
-      transport: [...prev.transport, { type: 'walking', description: '' }]
-    }));
-  }
-
-  function updateTransport(index: number, field: keyof Transport, value: any) {
-    setExperienceData(prev => ({
-      ...prev,
-      transport: prev.transport.map((transport, i) => 
-        i === index ? { ...transport, [field]: value } : transport
-      )
-    }));
-  }
-
-  function removeTransport(index: number) {
-    setExperienceData(prev => ({
-      ...prev,
-      transport: prev.transport.filter((_, i) => i !== index)
+      items: prev.items.filter(item => item.id !== id)
     }));
   }
 
@@ -276,12 +216,9 @@ export default function CreateExperience() {
         location: '',
         duration: '',
         difficulty: 'moderate',
-        category: 'cultural',
         pricePerPass: '0.01',
-        hotels: [],
-        shopping: [],
-        food: [],
-        transport: [],
+        items: [],
+        categories: [],
       });
 
     } catch (err: any) {
@@ -302,7 +239,7 @@ export default function CreateExperience() {
           type="text"
           value={experienceData.title}
           onChange={(e) => setExperienceData(prev => ({ ...prev, title: e.target.value }))}
-          placeholder="e.g., Hidden Gems of Tokyo's Street Food Scene"
+          placeholder="e.g., Top 10 Luxury Hotels in Bali, Best Street Food Tour Bangkok"
           style={{ width: '100%', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px' }}
         />
       </div>
@@ -314,7 +251,7 @@ export default function CreateExperience() {
         <textarea
           value={experienceData.description}
           onChange={(e) => setExperienceData(prev => ({ ...prev, description: e.target.value }))}
-          placeholder="Describe your travel experience in detail..."
+          placeholder="Describe your experience package. Mix categories like attractions + food + transport for a complete experience..."
           rows={4}
           style={{ width: '100%', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px' }}
         />
@@ -329,7 +266,7 @@ export default function CreateExperience() {
             type="text"
             value={experienceData.location}
             onChange={(e) => setExperienceData(prev => ({ ...prev, location: e.target.value }))}
-            placeholder="e.g., Tokyo, Japan"
+            placeholder="e.g., Bali, Indonesia or Multiple Locations"
             style={{ width: '100%', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px' }}
           />
         </div>
@@ -342,7 +279,7 @@ export default function CreateExperience() {
             type="text"
             value={experienceData.duration}
             onChange={(e) => setExperienceData(prev => ({ ...prev, duration: e.target.value }))}
-            placeholder="e.g., 3 days, 1 week"
+            placeholder="e.g., 2 hours, Full day, 3 days"
             style={{ width: '100%', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px' }}
           />
         </div>
@@ -358,29 +295,9 @@ export default function CreateExperience() {
             onChange={(e) => setExperienceData(prev => ({ ...prev, difficulty: e.target.value as any }))}
             style={{ width: '100%', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px' }}
           >
-            <option value="easy">Easy - Relaxed pace</option>
-            <option value="moderate">Moderate - Some walking</option>
-            <option value="challenging">Challenging - Active adventure</option>
-          </select>
-        </div>
-
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-            Category
-          </label>
-          <select
-            value={experienceData.category}
-            onChange={(e) => setExperienceData(prev => ({ ...prev, category: e.target.value as any }))}
-            style={{ width: '100%', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px' }}
-          >
-            <option value="cultural">Cultural</option>
-            <option value="adventure">Adventure</option>
-            <option value="relaxation">Relaxation</option>
-            <option value="culinary">Culinary</option>
-            <option value="nightlife">Nightlife</option>
-            <option value="nature">Nature</option>
-            <option value="shopping">Shopping</option>
-            <option value="other">Other</option>
+            <option value="easy">Easy - Anyone can enjoy</option>
+            <option value="moderate">Moderate - Some requirements</option>
+            <option value="challenging">Challenging - High difficulty</option>
           </select>
         </div>
 
@@ -396,648 +313,469 @@ export default function CreateExperience() {
             style={{ width: '100%', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px' }}
           />
         </div>
+
+        <div>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+            Max Participants (optional)
+          </label>
+          <input
+            type="number"
+            value={experienceData.maxParticipants || ''}
+            onChange={(e) => setExperienceData(prev => ({ ...prev, maxParticipants: e.target.value }))}
+            placeholder="e.g., 10"
+            style={{ width: '100%', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px' }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderCategories = () => (
+    <div>
+      <div style={{ marginBottom: '24px' }}>
+        <h3 style={{ margin: '0 0 12px 0', color: '#1e293b' }}>Choose Experience Categories</h3>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '16px' }}>
+          Select the types of experiences you want to include. You can mix multiple categories like Hotels + Food + Tours.
+        </p>
       </div>
 
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+        {EXPERIENCE_CATEGORIES.map((category) => {
+          const isSelected = experienceData.categories.includes(category);
+          const icons: { [key: string]: string } = {
+            'Attraction Tickets': '🎫',
+            'Tours': '🗺️', 
+            'Adventure': '🏔️',
+            'Water Activities': '🏊',
+            'Cruises': '🚢',
+            'Nature & Wildlife': '🌿',
+            'Entertainment & Shows': '🎭',
+            'Transportation': '🚗',
+            'Food & Drink': '🍽️',
+            'Aerial Sightseeing': '🚁',
+            'Travel Services': '🧳',
+            'Wellness': '🧘'
+          };
+          
+          return (
+            <div
+              key={category}
+              onClick={() => toggleCategory(category)}
+              style={{
+                padding: '20px',
+                border: isSelected ? '2px solid #10b981' : '2px solid #e5e7eb',
+                borderRadius: '12px',
+                backgroundColor: isSelected ? '#f0fdf4' : 'white',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                textAlign: 'center'
+              }}
+            >
+              <div style={{ fontSize: '32px', marginBottom: '8px' }}>
+                {icons[category] || '📍'}
+              </div>
+              <div style={{ 
+                fontWeight: '600', 
+                color: isSelected ? '#15803d' : '#374151',
+                fontSize: '16px'
+              }}>
+                {category}
+              </div>
+              {isSelected && (
+                <div style={{ 
+                  marginTop: '8px',
+                  fontSize: '12px',
+                  color: '#16a34a',
+                  fontWeight: '500'
+                }}>
+                  ✓ Selected
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {experienceData.categories.length > 0 && (
+        <div style={{
+          marginTop: '24px',
+          padding: '16px',
+          backgroundColor: '#f0fdf4',
+          border: '1px solid #bbf7d0',
+          borderRadius: '8px'
+        }}>
+          <h4 style={{ margin: '0 0 8px 0', color: '#15803d' }}>Selected Categories:</h4>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {experienceData.categories.map(category => (
+              <span key={category} style={{
+                padding: '4px 12px',
+                backgroundColor: '#10b981',
+                color: 'white',
+                borderRadius: '16px',
+                fontSize: '14px',
+                fontWeight: '500'
+              }}>
+                {category}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderItems = () => {
+    const groupedItems = experienceData.categories.reduce((acc, category) => {
+      acc[category] = experienceData.items.filter(item => item.category === category);
+      return acc;
+    }, {} as { [key: string]: ExperienceItem[] });
+
+    if (experienceData.categories.length === 0) {
+      return (
+        <div style={{
+          textAlign: 'center',
+          padding: '60px 20px',
+          color: '#6b7280',
+          border: '2px dashed #e5e7eb',
+          borderRadius: '12px'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📅</div>
+          <h3 style={{ margin: '0 0 8px 0', color: '#374151' }}>No Categories Selected</h3>
+          <p style={{ margin: 0 }}>Please go back and select at least one category first.</p>
+        </div>
+      );
+    }
+
+    return (
       <div>
-        <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-          Max Participants (optional)
-        </label>
-        <input
-          type="number"
-          value={experienceData.maxParticipants || ''}
-          onChange={(e) => setExperienceData(prev => ({ ...prev, maxParticipants: e.target.value }))}
-          placeholder="e.g., 10"
-          style={{ width: '100%', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px' }}
-        />
+        <div style={{ marginBottom: '24px' }}>
+          <h3 style={{ margin: '0 0 8px 0', color: '#1e293b' }}>Add Experience Items</h3>
+          <p style={{ margin: 0, color: '#6b7280' }}>
+            Add specific items for each selected category. All fields except name are optional.
+          </p>
+        </div>
+
+        {experienceData.categories.map(category => (
+          <div key={category} style={{
+            marginBottom: '32px',
+            padding: '24px',
+            border: '1px solid #e5e7eb',
+            borderRadius: '12px',
+            backgroundColor: '#fafbfc'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h4 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>
+                {category} ({groupedItems[category]?.length || 0} items)
+              </h4>
+              <button
+                onClick={() => addExperienceItem(category)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500'
+                }}
+              >
+                + Add {category}
+              </button>
+            </div>
+
+            {groupedItems[category]?.map((item) => (
+              <div key={item.id} style={{
+                padding: '20px',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                marginBottom: '16px',
+                backgroundColor: 'white'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                  <h5 style={{ margin: 0, color: '#374151' }}>Item Details</h5>
+                  <button
+                    onClick={() => removeExperienceItem(item.id)}
+                    style={{
+                      padding: '4px 8px',
+                      backgroundColor: '#ef4444',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+
+                <div style={{ display: 'grid', gap: '16px' }}>
+                  {/* Name - Required */}
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                      Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={item.name}
+                      onChange={(e) => updateExperienceItem(item.id, 'name', e.target.value)}
+                      placeholder={`e.g., ${category === 'Food & Drink' ? 'Michelin Star Restaurant' : category === 'Adventure' ? 'Bungee Jumping Experience' : category === 'Tours' ? 'Historical Walking Tour' : 'Amazing Experience'}`}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                      Description (optional)
+                    </label>
+                    <textarea
+                      value={item.description || ''}
+                      onChange={(e) => updateExperienceItem(item.id, 'description', e.target.value)}
+                      placeholder="Describe what makes this special..."
+                      rows={2}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                    />
+                  </div>
+
+                  {/* Address and Contact */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                        Address (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={item.address || ''}
+                        onChange={(e) => updateExperienceItem(item.id, 'address', e.target.value)}
+                        placeholder="Street address or location"
+                        style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                        Phone (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={item.phoneNumber || ''}
+                        onChange={(e) => updateExperienceItem(item.id, 'phoneNumber', e.target.value)}
+                        placeholder="Contact number"
+                        style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Price, Duration, Website */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                        Price Range (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={item.priceRange || ''}
+                        onChange={(e) => updateExperienceItem(item.id, 'priceRange', e.target.value)}
+                        placeholder="e.g., $50-100"
+                        style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                        Duration (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={item.duration || ''}
+                        onChange={(e) => updateExperienceItem(item.id, 'duration', e.target.value)}
+                        placeholder="e.g., 2 hours"
+                        style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                        Website (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={item.website || ''}
+                        onChange={(e) => updateExperienceItem(item.id, 'website', e.target.value)}
+                        placeholder="https://..."
+                        style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Expandable Advanced Options */}
+                  <details style={{ marginTop: '8px' }}>
+                    <summary style={{ cursor: 'pointer', color: '#6366f1', fontWeight: '500' }}>
+                      Advanced Options (optional)
+                    </summary>
+                    <div style={{ marginTop: '16px', display: 'grid', gap: '16px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                            Difficulty
+                          </label>
+                          <select
+                            value={item.difficulty || ''}
+                            onChange={(e) => updateExperienceItem(item.id, 'difficulty', e.target.value)}
+                            style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                          >
+                            <option value="">Not specified</option>
+                            <option value="easy">Easy</option>
+                            <option value="moderate">Moderate</option>
+                            <option value="hard">Hard</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                            Age Restriction
+                          </label>
+                          <input
+                            type="text"
+                            value={item.ageRestriction || ''}
+                            onChange={(e) => updateExperienceItem(item.id, 'ageRestriction', e.target.value)}
+                            placeholder="e.g., 18+, Family friendly"
+                            style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                            Group Size
+                          </label>
+                          <input
+                            type="text"
+                            value={item.groupSize || ''}
+                            onChange={(e) => updateExperienceItem(item.id, 'groupSize', e.target.value)}
+                            placeholder="e.g., Max 10 people"
+                            style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                            Operating Hours
+                          </label>
+                          <input
+                            type="text"
+                            value={item.operatingHours || ''}
+                            onChange={(e) => updateExperienceItem(item.id, 'operatingHours', e.target.value)}
+                            placeholder="e.g., 9am-5pm daily"
+                            style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                            Seasonality
+                          </label>
+                          <input
+                            type="text"
+                            value={item.seasonality || ''}
+                            onChange={(e) => updateExperienceItem(item.id, 'seasonality', e.target.value)}
+                            placeholder="e.g., Year-round, Summer only"
+                            style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                          Special Requirements
+                        </label>
+                        <input
+                          type="text"
+                          value={item.specialRequirements || ''}
+                          onChange={(e) => updateExperienceItem(item.id, 'specialRequirements', e.target.value)}
+                          placeholder="e.g., Bring ID, Advance booking required"
+                          style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                            Latitude
+                          </label>
+                          <input
+                            type="text"
+                            value={item.geoLocation?.lat || ''}
+                            onChange={(e) => updateExperienceItem(item.id, 'geoLocation', { 
+                              ...item.geoLocation, 
+                              lat: e.target.value 
+                            })}
+                            placeholder="e.g., 35.6584"
+                            style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                            Longitude
+                          </label>
+                          <input
+                            type="text"
+                            value={item.geoLocation?.lng || ''}
+                            onChange={(e) => updateExperienceItem(item.id, 'geoLocation', { 
+                              ...item.geoLocation, 
+                              lng: e.target.value 
+                            })}
+                            placeholder="e.g., 139.7016"
+                            style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '500' }}>
+                          <input
+                            type="checkbox"
+                            checked={item.bookingRequired || false}
+                            onChange={(e) => updateExperienceItem(item.id, 'bookingRequired', e.target.checked)}
+                          />
+                          Advance booking required
+                        </label>
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
+                          Tags (comma-separated)
+                        </label>
+                        <input
+                          type="text"
+                          value={item.tags?.join(', ') || ''}
+                          onChange={(e) => updateExperienceItem(item.id, 'tags', e.target.value.split(',').map(s => s.trim()).filter(s => s))}
+                          placeholder="e.g., romantic, family-friendly, luxury"
+                          style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
+                        />
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            ))}
+
+            {(!groupedItems[category] || groupedItems[category].length === 0) && (
+              <div style={{
+                textAlign: 'center',
+                padding: '32px',
+                color: '#6b7280',
+                border: '2px dashed #d1d5db',
+                borderRadius: '8px',
+                backgroundColor: 'white'
+              }}>
+                <div style={{ fontSize: '24px', marginBottom: '8px' }}>📄</div>
+                <p style={{ margin: 0, fontSize: '14px' }}>No {category.toLowerCase()} added yet. Click "Add {category}" to get started.</p>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
-    </div>
-  );
+    );
+  };
 
-  const renderHotels = () => (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h3 style={{ margin: 0 }}>Hotels & Accommodation</h3>
-        <button 
-          onClick={addHotel}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#10b981',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer'
-          }}
-        >
-          + Add Hotel
-        </button>
-      </div>
-
-      {experienceData.hotels.map((hotel, index) => (
-        <div key={index} style={{
-          padding: '20px',
-          border: '1px solid #e5e7eb',
-          borderRadius: '8px',
-          marginBottom: '16px'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <h4 style={{ margin: 0 }}>Hotel #{index + 1}</h4>
-            <button 
-              onClick={() => removeHotel(index)}
-              style={{
-                padding: '4px 8px',
-                backgroundColor: '#ef4444',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '12px'
-              }}
-            >
-              Remove
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gap: '16px' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                Hotel Name *
-              </label>
-              <input
-                type="text"
-                value={hotel.name}
-                onChange={(e) => updateHotel(index, 'name', e.target.value)}
-                placeholder="e.g., Shibuya Excel Hotel"
-                style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                Address (optional)
-              </label>
-              <input
-                type="text"
-                value={hotel.address || ''}
-                onChange={(e) => updateHotel(index, 'address', e.target.value)}
-                placeholder="e.g., 1-12-2 Dogenzaka, Shibuya, Tokyo"
-                style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-              />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                  Phone Number (optional)
-                </label>
-                <input
-                  type="text"
-                  value={hotel.phoneNumber || ''}
-                  onChange={(e) => updateHotel(index, 'phoneNumber', e.target.value)}
-                  placeholder="e.g., +81 3-5457-0109"
-                  style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                  Price Range (optional)
-                </label>
-                <input
-                  type="text"
-                  value={hotel.priceRange || ''}
-                  onChange={(e) => updateHotel(index, 'priceRange', e.target.value)}
-                  placeholder="e.g., $100-200/night"
-                  style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                  Latitude (optional)
-                </label>
-                <input
-                  type="text"
-                  value={hotel.geoLocation?.lat || ''}
-                  onChange={(e) => updateHotel(index, 'geoLocation', { 
-                    ...hotel.geoLocation, 
-                    lat: e.target.value 
-                  })}
-                  placeholder="e.g., 35.6584"
-                  style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                  Longitude (optional)
-                </label>
-                <input
-                  type="text"
-                  value={hotel.geoLocation?.lng || ''}
-                  onChange={(e) => updateHotel(index, 'geoLocation', { 
-                    ...hotel.geoLocation, 
-                    lng: e.target.value 
-                  })}
-                  placeholder="e.g., 139.7016"
-                  style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                Amenities (optional)
-              </label>
-              <input
-                type="text"
-                value={hotel.amenities?.join(', ') || ''}
-                onChange={(e) => updateHotel(index, 'amenities', e.target.value.split(',').map(s => s.trim()).filter(s => s))}
-                placeholder="e.g., WiFi, Gym, Pool, Restaurant"
-                style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-              />
-              <small style={{ color: '#6b7280' }}>Separate multiple amenities with commas</small>
-            </div>
-          </div>
-        </div>
-      ))}
-
-      {experienceData.hotels.length === 0 && (
-        <div style={{
-          textAlign: 'center',
-          padding: '40px',
-          color: '#6b7280',
-          border: '2px dashed #e5e7eb',
-          borderRadius: '8px'
-        }}>
-          <div style={{ fontSize: '32px', marginBottom: '12px' }}>🏨</div>
-          <p>No hotels added yet. Click "Add Hotel" to recommend accommodation.</p>
-        </div>
-      )}
-    </div>
-  );
-
-  // Similar render functions for shopping, food, and transport would go here...
-  // For brevity, I'll include just the shopping one and indicate where others would go
-
-  const renderShopping = () => (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h3 style={{ margin: 0 }}>Shopping & Local Markets</h3>
-        <button 
-          onClick={addShopping}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#8b5cf6',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer'
-          }}
-        >
-          + Add Shopping Spot
-        </button>
-      </div>
-
-      {experienceData.shopping.map((shop, index) => (
-        <div key={index} style={{
-          padding: '20px',
-          border: '1px solid #e5e7eb',
-          borderRadius: '8px',
-          marginBottom: '16px'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <h4 style={{ margin: 0 }}>Shopping Spot #{index + 1}</h4>
-            <button 
-              onClick={() => removeShopping(index)}
-              style={{
-                padding: '4px 8px',
-                backgroundColor: '#ef4444',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '12px'
-              }}
-            >
-              Remove
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gap: '16px' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                Shop/Market Name *
-              </label>
-              <input
-                type="text"
-                value={shop.name}
-                onChange={(e) => updateShopping(index, 'name', e.target.value)}
-                placeholder="e.g., Tsukiji Outer Market, Shibuya 109"
-                style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-              />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                  Category
-                </label>
-                <select
-                  value={shop.category}
-                  onChange={(e) => updateShopping(index, 'category', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-                >
-                  <option value="clothes">Clothes & Fashion</option>
-                  <option value="art">Art & Galleries</option>
-                  <option value="crafts">Local Crafts</option>
-                  <option value="souvenirs">Souvenirs</option>
-                  <option value="electronics">Electronics</option>
-                  <option value="books">Books & Media</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                  Price Range (optional)
-                </label>
-                <input
-                  type="text"
-                  value={shop.priceRange || ''}
-                  onChange={(e) => updateShopping(index, 'priceRange', e.target.value)}
-                  placeholder="e.g., $10-100, Budget-friendly"
-                  style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                Address (optional)
-              </label>
-              <input
-                type="text"
-                value={shop.address || ''}
-                onChange={(e) => updateShopping(index, 'address', e.target.value)}
-                placeholder="e.g., 5-2-1 Tsukiji, Chuo City, Tokyo"
-                style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                Description (optional)
-              </label>
-              <textarea
-                value={shop.description || ''}
-                onChange={(e) => updateShopping(index, 'description', e.target.value)}
-                placeholder="What makes this place special? What can you find here?"
-                rows={2}
-                style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-              />
-            </div>
-          </div>
-        </div>
-      ))}
-
-      {experienceData.shopping.length === 0 && (
-        <div style={{
-          textAlign: 'center',
-          padding: '40px',
-          color: '#6b7280',
-          border: '2px dashed #e5e7eb',
-          borderRadius: '8px'
-        }}>
-          <div style={{ fontSize: '32px', marginBottom: '12px' }}>🛍️</div>
-          <p>No shopping spots added yet. Click "Add Shopping Spot" to recommend places to shop.</p>
-        </div>
-      )}
-    </div>
-  );
-
-  // Continue in next part...
-  const renderFood = () => (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h3 style={{ margin: 0 }}>Food & Dining</h3>
-        <button 
-          onClick={addFood}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#f59e0b',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer'
-          }}
-        >
-          + Add Restaurant/Food
-        </button>
-      </div>
-
-      {experienceData.food.map((food, index) => (
-        <div key={index} style={{
-          padding: '20px',
-          border: '1px solid #e5e7eb',
-          borderRadius: '8px',
-          marginBottom: '16px'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <h4 style={{ margin: 0 }}>Food Spot #{index + 1}</h4>
-            <button 
-              onClick={() => removeFood(index)}
-              style={{
-                padding: '4px 8px',
-                backgroundColor: '#ef4444',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '12px'
-              }}
-            >
-              Remove
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gap: '16px' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                Restaurant/Food Name *
-              </label>
-              <input
-                type="text"
-                value={food.name}
-                onChange={(e) => updateFood(index, 'name', e.target.value)}
-                placeholder="e.g., Ramen Yokocho, Tsukiji Fish Market"
-                style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-              />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                  Cuisine Type
-                </label>
-                <select
-                  value={food.cuisine}
-                  onChange={(e) => updateFood(index, 'cuisine', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-                >
-                  <option value="street">Street Food</option>
-                  <option value="local">Local Cuisine</option>
-                  <option value="international">International</option>
-                  <option value="fine-dining">Fine Dining</option>
-                  <option value="cafe">Cafe/Coffee</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                  Dietary Type
-                </label>
-                <select
-                  value={food.dietaryType}
-                  onChange={(e) => updateFood(index, 'dietaryType', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-                >
-                  <option value="mixed">Mixed (Veg & Non-Veg)</option>
-                  <option value="veg">Vegetarian</option>
-                  <option value="non-veg">Non-Vegetarian</option>
-                  <option value="vegan">Vegan</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                  Price Range (optional)
-                </label>
-                <input
-                  type="text"
-                  value={food.priceRange || ''}
-                  onChange={(e) => updateFood(index, 'priceRange', e.target.value)}
-                  placeholder="e.g., $5-15, Budget"
-                  style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                Address (optional)
-              </label>
-              <input
-                type="text"
-                value={food.address || ''}
-                onChange={(e) => updateFood(index, 'address', e.target.value)}
-                placeholder="e.g., 4-10-16 Tsukiji, Chuo City, Tokyo"
-                style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                Specialties (optional)
-              </label>
-              <input
-                type="text"
-                value={food.specialties?.join(', ') || ''}
-                onChange={(e) => updateFood(index, 'specialties', e.target.value.split(',').map(s => s.trim()).filter(s => s))}
-                placeholder="e.g., Tuna sashimi, Ramen, Fresh sushi"
-                style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-              />
-              <small style={{ color: '#6b7280' }}>Separate multiple specialties with commas</small>
-            </div>
-          </div>
-        </div>
-      ))}
-
-      {experienceData.food.length === 0 && (
-        <div style={{
-          textAlign: 'center',
-          padding: '40px',
-          color: '#6b7280',
-          border: '2px dashed #e5e7eb',
-          borderRadius: '8px'
-        }}>
-          <div style={{ fontSize: '32px', marginBottom: '12px' }}>🍜</div>
-          <p>No food spots added yet. Click "Add Restaurant/Food" to recommend dining experiences.</p>
-        </div>
-      )}
-    </div>
-  );
-
-  const renderTransport = () => (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h3 style={{ margin: 0 }}>Transport & Getting Around</h3>
-        <button 
-          onClick={addTransport}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#3b82f6',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer'
-          }}
-        >
-          + Add Transport Option
-        </button>
-      </div>
-
-      {experienceData.transport.map((transport, index) => (
-        <div key={index} style={{
-          padding: '20px',
-          border: '1px solid #e5e7eb',
-          borderRadius: '8px',
-          marginBottom: '16px'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <h4 style={{ margin: 0 }}>Transport Option #{index + 1}</h4>
-            <button 
-              onClick={() => removeTransport(index)}
-              style={{
-                padding: '4px 8px',
-                backgroundColor: '#ef4444',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '12px'
-              }}
-            >
-              Remove
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gap: '16px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                  Transport Type
-                </label>
-                <select
-                  value={transport.type}
-                  onChange={(e) => updateTransport(index, 'type', e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-                >
-                  <option value="walking">Walking</option>
-                  <option value="taxi">Taxi/Rideshare</option>
-                  <option value="bus">Bus</option>
-                  <option value="train">Train</option>
-                  <option value="metro">Metro/Subway</option>
-                  <option value="bike">Bike/Cycling</option>
-                  <option value="car">Car/Rental</option>
-                  <option value="boat">Boat/Ferry</option>
-                  <option value="flight">Flight</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                  Description *
-                </label>
-                <input
-                  type="text"
-                  value={transport.description}
-                  onChange={(e) => updateTransport(index, 'description', e.target.value)}
-                  placeholder="e.g., Take JR Yamanote Line from Shinjuku to Shibuya"
-                  style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                  From Location (optional)
-                </label>
-                <input
-                  type="text"
-                  value={transport.fromLocation || ''}
-                  onChange={(e) => updateTransport(index, 'fromLocation', e.target.value)}
-                  placeholder="e.g., Shinjuku Station"
-                  style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                  To Location (optional)
-                </label>
-                <input
-                  type="text"
-                  value={transport.toLocation || ''}
-                  onChange={(e) => updateTransport(index, 'toLocation', e.target.value)}
-                  placeholder="e.g., Shibuya Station"
-                  style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                  Estimated Cost (optional)
-                </label>
-                <input
-                  type="text"
-                  value={transport.estimatedCost || ''}
-                  onChange={(e) => updateTransport(index, 'estimatedCost', e.target.value)}
-                  placeholder="e.g., ¥160, $15-20"
-                  style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                  Estimated Time (optional)
-                </label>
-                <input
-                  type="text"
-                  value={transport.estimatedTime || ''}
-                  onChange={(e) => updateTransport(index, 'estimatedTime', e.target.value)}
-                  placeholder="e.g., 7 minutes, 30-45 mins"
-                  style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500' }}>
-                Booking/Additional Info (optional)
-              </label>
-              <textarea
-                value={transport.bookingInfo || ''}
-                onChange={(e) => updateTransport(index, 'bookingInfo', e.target.value)}
-                placeholder="e.g., Book via JR Pass, Download Uber app, Buy IC card at station"
-                rows={2}
-                style={{ width: '100%', padding: '8px', border: '1px solid #e5e7eb', borderRadius: '4px' }}
-              />
-            </div>
-          </div>
-        </div>
-      ))}
-
-      {experienceData.transport.length === 0 && (
-        <div style={{
-          textAlign: 'center',
-          padding: '40px',
-          color: '#6b7280',
-          border: '2px dashed #e5e7eb',
-          borderRadius: '8px'
-        }}>
-          <div style={{ fontSize: '32px', marginBottom: '12px' }}>🚇</div>
-          <p>No transport options added yet. Click "Add Transport Option" to help travelers get around.</p>
-        </div>
-      )}
-    </div>
-  );
 
   const renderReview = () => (
     <div>
@@ -1050,7 +788,6 @@ export default function CreateExperience() {
           <div><strong>Location:</strong> {experienceData.location}</div>
           <div><strong>Duration:</strong> {experienceData.duration}</div>
           <div><strong>Price:</strong> {experienceData.pricePerPass} ETH</div>
-          <div><strong>Category:</strong> {experienceData.category}</div>
           <div><strong>Difficulty:</strong> {experienceData.difficulty}</div>
           {experienceData.maxParticipants && (
             <div><strong>Max Participants:</strong> {experienceData.maxParticipants}</div>
@@ -1058,33 +795,36 @@ export default function CreateExperience() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-        <div style={{ padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '8px' }}>
-          <h5 style={{ margin: '0 0 8px 0', color: '#15803d' }}>🏨 Hotels: {experienceData.hotels.length}</h5>
-          {experienceData.hotels.map((hotel, i) => (
-            <div key={i} style={{ fontSize: '12px', color: '#166534' }}>• {hotel.name}</div>
-          ))}
-        </div>
-
-        <div style={{ padding: '16px', backgroundColor: '#fef3c7', borderRadius: '8px' }}>
-          <h5 style={{ margin: '0 0 8px 0', color: '#d97706' }}>🛍️ Shopping: {experienceData.shopping.length}</h5>
-          {experienceData.shopping.map((shop, i) => (
-            <div key={i} style={{ fontSize: '12px', color: '#92400e' }}>• {shop.name}</div>
-          ))}
-        </div>
-
-        <div style={{ padding: '16px', backgroundColor: '#fef2f2', borderRadius: '8px' }}>
-          <h5 style={{ margin: '0 0 8px 0', color: '#dc2626' }}>🍜 Food: {experienceData.food.length}</h5>
-          {experienceData.food.map((food, i) => (
-            <div key={i} style={{ fontSize: '12px', color: '#991b1b' }}>• {food.name}</div>
-          ))}
-        </div>
-
-        <div style={{ padding: '16px', backgroundColor: '#eff6ff', borderRadius: '8px' }}>
-          <h5 style={{ margin: '0 0 8px 0', color: '#2563eb' }}>🚇 Transport: {experienceData.transport.length}</h5>
-          {experienceData.transport.map((transport, i) => (
-            <div key={i} style={{ fontSize: '12px', color: '#1d4ed8' }}>• {transport.type}: {transport.description}</div>
-          ))}
+      <div style={{ marginBottom: '20px' }}>
+        <h4 style={{ margin: '0 0 12px 0', color: '#1e293b' }}>Categories & Items Summary</h4>
+        <div style={{ display: 'grid', gap: '16px' }}>
+          {experienceData.categories.map(category => {
+            const categoryItems = experienceData.items.filter(item => item.category === category);
+            return (
+              <div key={category} style={{ 
+                padding: '16px', 
+                backgroundColor: '#f0fdf4', 
+                borderRadius: '8px',
+                border: '1px solid #bbf7d0'
+              }}>
+                <h5 style={{ margin: '0 0 8px 0', color: '#15803d' }}>
+                  {category} ({categoryItems.length} items)
+                </h5>
+                {categoryItems.map((item, i) => (
+                  <div key={i} style={{ fontSize: '12px', color: '#166534', marginBottom: '2px' }}>
+                    • {item.name}
+                    {item.priceRange && ` (${item.priceRange})`}
+                    {item.duration && ` - ${item.duration}`}
+                  </div>
+                ))}
+                {categoryItems.length === 0 && (
+                  <div style={{ fontSize: '12px', color: '#6b7280', fontStyle: 'italic' }}>
+                    No items added for this category
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -1117,6 +857,18 @@ export default function CreateExperience() {
           <li>You'll need to confirm the transaction in your wallet</li>
         </ul>
       </div>
+
+      <div style={{
+        padding: '16px',
+        backgroundColor: '#eff6ff',
+        border: '1px solid #bfdbfe',
+        borderRadius: '8px'
+      }}>
+        <h4 style={{ margin: '0 0 8px 0', color: '#1e40af' }}>💡 Experience Summary</h4>
+        <p style={{ margin: 0, fontSize: '14px', color: '#1e40af' }}>
+          Total: {experienceData.categories.length} categories, {experienceData.items.length} items
+        </p>
+      </div>
     </div>
   );
 
@@ -1127,11 +879,10 @@ export default function CreateExperience() {
                experienceData.location && experienceData.duration && 
                experienceData.pricePerPass;
       case 1:
+        return experienceData.categories.length > 0;
       case 2:
+        return true; // Items are optional
       case 3:
-      case 4:
-        return true; // Optional sections
-      case 5:
         return true; // Review step
       default:
         return false;
@@ -1266,11 +1017,9 @@ export default function CreateExperience() {
           marginBottom: '20px'
         }}>
           {currentStep === 0 && renderBasicInfo()}
-          {currentStep === 1 && renderHotels()}
-          {currentStep === 2 && renderShopping()}
-          {currentStep === 3 && renderFood()}
-          {currentStep === 4 && renderTransport()}
-          {currentStep === 5 && renderReview()}
+          {currentStep === 1 && renderCategories()}
+          {currentStep === 2 && renderItems()}
+          {currentStep === 3 && renderReview()}
         </div>
 
         {/* Navigation */}
