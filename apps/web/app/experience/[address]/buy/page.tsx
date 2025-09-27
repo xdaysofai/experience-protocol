@@ -304,20 +304,36 @@ export default function BuyPage({ params }: { params: { address: string } }) {
           <h1 style={{ margin: 0, color: '#1e293b', fontSize: '24px', fontWeight: '600' }}>
             🎫 Buy Experience Pass
           </h1>
-          <a 
-            href="/experience"
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#6366f1',
-              color: 'white',
-              textDecoration: 'none',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: '500'
-            }}
-          >
-            📊 My Dashboard
-          </a>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <a 
+              href="/experience"
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#6366f1',
+                color: 'white',
+                textDecoration: 'none',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '500'
+              }}
+            >
+              📊 My Dashboard
+            </a>
+            <a 
+              href="/create"
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#10b981',
+                color: 'white',
+                textDecoration: 'none',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '500'
+              }}
+            >
+              🌍 Create Experience
+            </a>
+          </div>
           </div>
 
         {/* Wallet Status */}

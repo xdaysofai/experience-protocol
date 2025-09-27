@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { createPublicClient, http } from 'viem';
 import { sepolia } from 'viem/chains';
-import { getInjectedProvider } from '../lib/provider';
+import { getInjectedProvider } from '../../lib/provider';
 
 const publicClient = createPublicClient({
   chain: sepolia,
@@ -210,9 +210,25 @@ export default function ExperienceDashboard() {
         borderRadius: '12px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
       }}>
-        <h1 style={{ margin: 0, color: '#1e293b', fontSize: '24px', fontWeight: '600' }}>
-          🎫 My Experiences
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <h1 style={{ margin: 0, color: '#1e293b', fontSize: '24px', fontWeight: '600' }}>
+            🎫 My Experiences
+          </h1>
+          <a 
+            href="/create"
+            style={{
+              padding: '12px 20px',
+              backgroundColor: '#10b981',
+              color: 'white',
+              textDecoration: 'none',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: '600'
+            }}
+          >
+            🌍 Create New Experience
+          </a>
+        </div>
         
         {/* Wallet Status */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>

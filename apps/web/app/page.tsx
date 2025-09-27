@@ -27,13 +27,19 @@ export default function HomePage() {
                   href={`/experience/${EXPERIENCE_ADDRESS}/buy`}
                   className="btn-primary text-lg px-8 py-4 inline-block"
                 >
-                  Buy Access Pass
+                  🎫 Buy Access Pass
                 </Link>
                 <Link 
-                  href={`/experience/${EXPERIENCE_ADDRESS}/settings`}
+                  href="/create"
+                  className="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-8 rounded-lg transition-colors duration-200 text-lg inline-block"
+                >
+                  🌍 Create Experience
+                </Link>
+                <Link 
+                  href="/experience"
                   className="btn-secondary text-lg px-8 py-4 inline-block"
                 >
-                  View Settings
+                  📊 My Dashboard
                 </Link>
               </div>
             </div>
