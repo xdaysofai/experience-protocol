@@ -42,6 +42,12 @@ export default function HomePage() {
                   🌍 Create Experience
                 </Link>
                 <Link 
+                  href="/governance"
+                  className="bg-red-500 hover:bg-red-600 text-white font-bold py-4 px-8 rounded-lg transition-colors duration-200 text-lg inline-block"
+                >
+                  🗳️ Governance
+                </Link>
+                <Link 
                   href="/experience"
                   className="btn-secondary text-lg px-8 py-4 inline-block"
                 >
