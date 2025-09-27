@@ -1,0 +1,13 @@
+{
+  "name": "@xp/relayer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file=../../.env src/server.ts"
+  },
+  "dependencies": {
+    "fastify": "4.28.1",
+    "viem": "2.21.15",
+    "dotenv": "16.4.5"
+  }
+}
