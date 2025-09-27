@@ -1,0 +1,18 @@
+{
+  "name": "@xp/contracts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "hardhat compile",
+    "run": "node --env-file=../.env",
+    "deploy:amoy": "node --env-file=../.env scripts/deploy-amoy.js",
+    "cfg:set-prices:amoy": "node --env-file=../.env scripts/cfg-set-prices-amoy.js"
+  },
+  "dependencies": {
+    "@nomicfoundation/hardhat-ethers": "3.0.8",
+    "@openzeppelin/contracts": "5.0.2",
+    "dotenv": "16.4.5",
+    "ethers": "6.13.2",
+    "hardhat": "2.22.12"
+  }
+}
