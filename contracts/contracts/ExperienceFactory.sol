@@ -5,9 +5,14 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Experience} from "./Experience.sol";
 
+interface IExperienceRegistry {
+    function registerExperience(address _experience, address _creator, string calldata _cid) external;
+}
+
 contract ExperienceFactory is Ownable2Step {
     address public immutable PLATFORM_WALLET;
     uint16  public immutable PLATFORM_FEE_BPS;
+    address public registry;
 
     event ExperienceCreated(address indexed creator, address experience, string cidInitial);
 
@@ -33,10 +38,27 @@ contract ExperienceFactory is Ownable2Step {
             flowSyncAuthority,
             PLATFORM_WALLET,
             PLATFORM_FEE_BPS,
-            actualProposerFeeBps
+            actualProposerFeeBps,
+            registry
         );
+        
+        // Register with registry if available
+        if (registry != address(0)) {
+            try IExperienceRegistry(registry).registerExperience(address(exp), creator, cidInitial) {
+                // Registration succeeded
+            } catch {
+                // Registration failed, but continue (don't revert the deployment)
+            }
+        }
         
         emit ExperienceCreated(creator, address(exp), cidInitial);
         return address(exp);
+    }
+
+    /**
+     * @dev Set the registry contract address (only owner)
+     */
+    function setRegistry(address _registry) external onlyOwner {
+        registry = _registry;
     }
 }

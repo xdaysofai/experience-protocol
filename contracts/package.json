@@ -6,6 +6,7 @@
     "build": "hardhat compile",
     "run": "node --env-file=../.env",
     "deploy:sepolia": "node --env-file=../.env ../node_modules/.bin/hardhat run scripts/deploy-sepolia.js --network sepolia",
+    "deploy:registry:sepolia": "node --env-file=../.env ../node_modules/.bin/hardhat run scripts/deploy-registry-sepolia.js --network sepolia",
     "cfg:set-price:sepolia": "node --env-file=../.env scripts/cfg-set-price-sepolia.js"
   },
   "dependencies": {

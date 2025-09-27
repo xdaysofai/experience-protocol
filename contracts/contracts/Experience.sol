@@ -6,6 +6,10 @@ import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+interface IExperienceRegistry {
+    function recordPurchase(address _purchaser, uint256 _quantity) external;
+}
+
 /**
  * Experience: ETH-only token-gated access sold in ERC-1155 "passes" (SBT, id=1).
  * Payments split: platform (immutable BPS), optional current proposer (state BPS), remainder to creator.
@@ -16,6 +20,7 @@ contract Experience is ERC1155, Ownable2Step, ReentrancyGuard {
     uint256 public constant PASS_ID = 1;
     address public immutable PLATFORM_WALLET;
     uint16  public immutable PLATFORM_FEE_BPS; // e.g., 500 = 5%
+    address public immutable REGISTRY;
 
     // ---- Roles / addresses ----
     address public creator;
@@ -57,13 +62,15 @@ contract Experience is ERC1155, Ownable2Step, ReentrancyGuard {
         address _flowSyncAuthority,
         address _platformWallet,
         uint16 _platformFeeBps,
-        uint16 _proposerFeeBps
+        uint16 _proposerFeeBps,
+        address _registry
     ) ERC1155("") Ownable(_creator) {
         if (_creator == address(0) || _platformWallet == address(0)) revert ZeroAddress();
         creator = _creator;
         flowSyncAuthority = _flowSyncAuthority;
         PLATFORM_WALLET = _platformWallet;
         PLATFORM_FEE_BPS = _platformFeeBps;
+        REGISTRY = _registry;
         proposerFeeBps = _proposerFeeBps;
         _cid = cidInitial;
         priceEthWei = 0; // disabled initially
@@ -105,6 +112,16 @@ contract Experience is ERC1155, Ownable2Step, ReentrancyGuard {
 
         // Mint SBT
         _mint(msg.sender, PASS_ID, qty, "");
+
+        // Record purchase in registry (if registry is set)
+        if (REGISTRY != address(0)) {
+            try IExperienceRegistry(REGISTRY).recordPurchase(msg.sender, qty) {
+                // Registry call succeeded
+            } catch {
+                // Registry call failed, but continue (don't revert the purchase)
+            }
+        }
+
         emit Bought(msg.sender, qty, paid);
     }
 
