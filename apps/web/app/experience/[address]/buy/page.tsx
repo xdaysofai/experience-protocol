@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { createPublicClient, createWalletClient, custom, http, parseUnits } from "viem";
-import { polygonAmoy } from "viem/chains";
+import { sepolia } from "viem/chains";
 
 const PASS_ID = 1n;
 
@@ -20,13 +20,13 @@ const expAbi = [
 
 export default function BuyPage({ params }: { params: { address: `0x${string}` } }) {
   const exp = params.address;
-  const chain = polygonAmoy;
+  const chain = sepolia;
 
   const TOKENS = useMemo(() => {
     return [
-      { sym: "USDC", addr: process.env.NEXT_PUBLIC_USDC_AMOY as `0x${string}` | undefined },
-      { sym: "DAI",  addr: process.env.NEXT_PUBLIC_DAI_AMOY  as `0x${string}` | undefined },
-      { sym: "WETH", addr: process.env.NEXT_PUBLIC_WETH_AMOY as `0x${string}` | undefined }
+      { sym: "USDC", addr: process.env.NEXT_PUBLIC_USDC_SEPOLIA as `0x${string}` | undefined },
+      { sym: "DAI",  addr: process.env.NEXT_PUBLIC_DAI_SEPOLIA  as `0x${string}` | undefined },
+      { sym: "WETH", addr: process.env.NEXT_PUBLIC_WETH_SEPOLIA as `0x${string}` | undefined }
     ].filter(t => !!t.addr) as {sym:string,addr:`0x${string}`}[];
   }, []);
 
