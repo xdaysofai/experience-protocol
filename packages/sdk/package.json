@@ -1,0 +1,9 @@
+{
+  "name": "@xp/sdk",
+  "private": true,
+  "type": "module",
+  "version": "0.0.1",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
