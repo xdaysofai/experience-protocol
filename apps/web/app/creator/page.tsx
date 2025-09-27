@@ -130,12 +130,14 @@ export default function CreatorDashboard() {
     const created: ExperienceInfo[] = [];
     
     try {
+      console.log(`🔍 Searching for experiences created by ${userAccount} from factory ${factoryAddress}`);
+      
       // Get latest block number
       const latestBlock = await publicClient.getBlockNumber();
       const chunkSize = 10000n; // Smaller chunks to avoid RPC limits
       
-      // Start from a recent block to catch newer deployments (last ~30 days)
-      const startBlock = latestBlock > 50000n ? latestBlock - 50000n : 0n;
+      // Start from the beginning to catch ALL deployments
+      const startBlock = 0n;
       
       for (let fromBlock = startBlock; fromBlock <= latestBlock; fromBlock += chunkSize) {
         const toBlock = fromBlock + chunkSize - 1n > latestBlock ? latestBlock : fromBlock + chunkSize - 1n;
