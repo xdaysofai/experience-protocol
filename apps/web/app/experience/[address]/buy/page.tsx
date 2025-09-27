@@ -88,15 +88,25 @@ export default function BuyPage({ params }: { params: { address: `0x${string}` }
       // If there are multiple wallets, try to select MetaMask specifically
       if (ethereum.providers?.length) {
         console.log(`Multiple providers detected (${ethereum.providers.length}), selecting MetaMask...`);
-        console.log("Available providers:", ethereum.providers.map((p: any) => ({
+        console.log("Available providers:", ethereum.providers.map((p: any, index: number) => ({
+          index,
           isMetaMask: p.isMetaMask,
           isCoinbaseWallet: p.isCoinbaseWallet,
-          isRabby: p.isRabby
+          isRabby: p.isRabby,
+          selectedProvider: p.selectedProvider,
+          _metamask: !!p._metamask,
+          constructor: p.constructor?.name,
+          networkVersion: p.networkVersion
         })));
         
-        const metamaskProvider = ethereum.providers.find((provider: any) => 
-          provider.isMetaMask && !provider.isCoinbaseWallet
-        );
+        // More robust MetaMask detection - look for the real MetaMask provider
+        const metamaskProvider = ethereum.providers.find((provider: any) => {
+          // MetaMask has these specific properties that Coinbase doesn't
+          return provider.isMetaMask && 
+                 !provider.isCoinbaseWallet && 
+                 !provider.selectedProvider &&
+                 (provider._metamask || provider.request);
+        }) || ethereum.providers.find((provider: any) => provider.isMetaMask);
         
         if (metamaskProvider) {
           console.log("Found MetaMask provider, requesting accounts...");
@@ -326,22 +336,42 @@ export default function BuyPage({ params }: { params: { address: `0x${string}` }
                       <button 
                         onClick={async () => {
                           console.log("Trying direct MetaMask connection...");
-                          if ((window as any).ethereum?.providers) {
-                            const metamask = (window as any).ethereum.providers.find((p: any) => p.isMetaMask);
-                            if (metamask) {
-                              try {
-                                setLoading("Connecting directly to MetaMask...");
-                                const accounts = await metamask.request({ method: "eth_requestAccounts" });
-                                setAccount(accounts[0]);
-                                const w = createWalletClient({ chain, transport: custom(metamask) });
-                                setWallet(w);
-                                setSuccess("MetaMask connected successfully!");
-                              } catch (err: any) {
-                                setError("Direct MetaMask connection failed: " + err.message);
-                              } finally {
-                                setLoading("");
-                              }
+                          try {
+                            setLoading("Connecting directly to MetaMask...");
+                            setError("");
+                            
+                            // Try accessing MetaMask directly through window.ethereum
+                            // First, try to request wallet_requestPermissions to force wallet selection
+                            try {
+                              await (window as any).ethereum.request({
+                                method: 'wallet_requestPermissions',
+                                params: [{ eth_accounts: {} }]
+                              });
+                            } catch (permErr: any) {
+                              console.log("Permission request failed, trying direct connection...");
                             }
+                            
+                            // Then request accounts
+                            const accounts = await (window as any).ethereum.request({ 
+                              method: "eth_requestAccounts" 
+                            });
+                            
+                            console.log("Direct connection accounts:", accounts);
+                            
+                            if (accounts.length > 0) {
+                              setAccount(accounts[0]);
+                              const w = createWalletClient({ 
+                                chain, 
+                                transport: custom((window as any).ethereum) 
+                              });
+                              setWallet(w);
+                              setSuccess("MetaMask connected successfully!");
+                            }
+                          } catch (err: any) {
+                            console.error("Direct MetaMask connection error:", err);
+                            setError("Direct MetaMask connection failed: " + err.message);
+                          } finally {
+                            setLoading("");
                           }
                         }}
                         className="btn-warning w-full text-sm"
@@ -368,6 +398,30 @@ export default function BuyPage({ params }: { params: { address: `0x${string}` }
                         className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm w-full transition-colors"
                       >
                         Switch to Sepolia Network
+                      </button>
+                      <button 
+                        onClick={() => {
+                          console.log("=== WALLET DEBUG INFO ===");
+                          console.log("window.ethereum:", (window as any).ethereum);
+                          console.log("Providers array:", (window as any).ethereum?.providers);
+                          if ((window as any).ethereum?.providers) {
+                            (window as any).ethereum.providers.forEach((p: any, i: number) => {
+                              console.log(`Provider ${i}:`, {
+                                isMetaMask: p.isMetaMask,
+                                isCoinbaseWallet: p.isCoinbaseWallet,
+                                _metamask: p._metamask,
+                                request: typeof p.request,
+                                selectedProvider: p.selectedProvider,
+                                constructor: p.constructor?.name,
+                                keys: Object.keys(p).slice(0, 10)
+                              });
+                            });
+                          }
+                          console.log("=== END DEBUG INFO ===");
+                        }}
+                        className="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg text-sm w-full transition-colors"
+                      >
+                        Debug Providers
                       </button>
                       <button 
                         onClick={() => {
