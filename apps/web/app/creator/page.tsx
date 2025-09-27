@@ -58,93 +58,163 @@ export default function CreatorDashboard() {
   const [showLighthouseSetup, setShowLighthouseSetup] = useState<boolean>(false);
   const [lighthouseEnabled, setLighthouseEnabled] = useState<boolean>(false);
 
+  // Enhanced loading states for better UX
+  const [lighthouseLoading, setLighthouseLoading] = useState<boolean>(false);
+  const [blockchainLoading, setBlockchainLoading] = useState<boolean>(false);
+  const [dataSource, setDataSource] = useState<'lighthouse' | 'blockchain' | 'hybrid' | 'known'>('known');
+
   function clearExperiences() {
     setCreatedExperiences([]);
     setPurchasedExperiences([]);
   }
 
+  // ENHANCED SMART FALLBACK STRATEGY
   async function loadExperiences() {
     if (!account) return;
     
     try {
       setLoading('Loading experiences...');
       
-      // Step 1: Load from Lighthouse (historical data)
+      // PHASE 1: INSTANT UX - Load from Lighthouse first (if available)
       let lighthouseExperiences: ExperienceIndex[] = [];
+      let lighthouseLoaded = false;
+      
       if (lighthouseEnabled && lighthouseHash) {
-        setLoading('Loading from Lighthouse...');
-        lighthouseExperiences = await loadFromLighthouse();
-        console.log(`📦 Loaded ${lighthouseExperiences.length} experiences from Lighthouse`);
+        try {
+          setLighthouseLoading(true);
+          setLoading('📦 Loading from Lighthouse (instant)...');
+          
+          lighthouseExperiences = await loadFromLighthouse();
+          lighthouseLoaded = true;
+          setDataSource('lighthouse');
+          console.log(`📦 INSTANT: Loaded ${lighthouseExperiences.length} experiences from Lighthouse`);
+          
+          // IMMEDIATELY show Lighthouse data for instant UX
+          const instantCreated: ExperienceInfo[] = [];
+          const instantPurchased: ExperienceInfo[] = [];
+          
+          for (const lhExp of lighthouseExperiences) {
+            try {
+              const info = await getExperienceInfo(lhExp.address, account);
+              if (info.isCreator) {
+                instantCreated.push(info);
+              } else if (info.passBalance > 0n) {
+                instantPurchased.push(info);
+              }
+            } catch (err) {
+              // Fallback to basic info from Lighthouse
+              const fallback = experienceFromIndex(lhExp, account);
+              if (fallback.isCreator) {
+                instantCreated.push(fallback);
+              } else if (fallback.passBalance > 0n) {
+                instantPurchased.push(fallback);
+              }
+            }
+          }
+          
+          setCreatedExperiences(instantCreated);
+          setPurchasedExperiences(instantPurchased);
+          setLighthouseLoading(false);
+          
+          // Show user that data is loaded and we're syncing
+          setLoading('✅ Data loaded! Syncing with blockchain...');
+          
+        } catch (err) {
+          console.warn('Lighthouse load failed, falling back to blockchain:', err);
+          setLighthouseLoading(false);
+        }
       }
 
-      // Step 2: Load recent experiences from blockchain (last 30 days)
-      setLoading('Checking recent blockchain activity...');
+      // PHASE 2: BACKGROUND SYNC - Load recent blockchain data (with timeout)
       const factoryAddress = process.env.NEXT_PUBLIC_FACTORY_ADDRESS as `0x${string}`;
       let recentExperiences: ExperienceInfo[] = [];
       
       if (factoryAddress) {
         try {
-          recentExperiences = await loadCreatedExperiencesChunked(factoryAddress, account);
-          console.log(`🔗 Found ${recentExperiences.length} recent experiences from blockchain`);
+          setBlockchainLoading(true);
+          
+          // Set a timeout for blockchain queries to prevent hanging
+          const blockchainPromise = loadCreatedExperiencesChunked(factoryAddress, account);
+          const timeoutPromise = new Promise<ExperienceInfo[]>((_, reject) => 
+            setTimeout(() => reject(new Error('Blockchain query timeout')), 10000)
+          );
+          
+          recentExperiences = await Promise.race([blockchainPromise, timeoutPromise]);
+          setBlockchainLoading(false);
+          console.log(`🔗 BACKGROUND: Found ${recentExperiences.length} recent experiences from blockchain`);
+          
         } catch (err: any) {
-          console.warn('Recent blockchain query failed, using Lighthouse only:', err.message);
+          setBlockchainLoading(false);
+          console.warn('Blockchain sync failed (using Lighthouse data):', err.message);
+          // Continue with Lighthouse data if blockchain fails
         }
       }
 
-      // Step 3: Merge Lighthouse and recent blockchain data
-      const allExperiences = new Map<string, ExperienceInfo>();
-      
-      // Add Lighthouse data first
-      setLoading('Converting Lighthouse data...');
-      for (const lhExp of lighthouseExperiences) {
-        try {
-          const info = await getExperienceInfo(lhExp.address, account);
-          allExperiences.set(lhExp.address.toLowerCase(), info);
-        } catch (err) {
-          console.warn(`Failed to load Lighthouse experience ${lhExp.address}:`, err);
-          const fallback = experienceFromIndex(lhExp, account);
-          allExperiences.set(lhExp.address.toLowerCase(), fallback);
-        }
-      }
-      
-      // Add/update with recent blockchain data
-      for (const recentExp of recentExperiences) {
-        allExperiences.set(recentExp.address.toLowerCase(), recentExp);
-      }
-
-      // Step 4: If still no data, check known experiences
-      if (allExperiences.size === 0) {
-        setLoading('Checking known experiences...');
-        const knownExperiences = await loadKnownExperiences();
-        for (const known of knownExperiences) {
-          allExperiences.set(known.address.toLowerCase(), known);
-        }
-      }
-
-      const created = Array.from(allExperiences.values());
-      setCreatedExperiences(created);
-      console.log(`✅ Total loaded: ${created.length} created experiences`);
-
-      // Step 5: Auto-sync new findings to Lighthouse (async)
-      if (lighthouseEnabled && recentExperiences.length > 0) {
-        setTimeout(async () => {
-          try {
-            console.log('🔄 Auto-syncing new experiences to Lighthouse...');
-            await syncExperiencesToLighthouse();
-          } catch (err) {
-            console.warn('Auto-sync to Lighthouse failed:', err);
+      // PHASE 3: MERGE - Combine Lighthouse + recent blockchain data
+      if (recentExperiences.length > 0 || !lighthouseLoaded) {
+        const allExperiences = new Map<string, ExperienceInfo>();
+        
+        // Add Lighthouse data first (if we have it)
+        if (lighthouseLoaded) {
+          for (const lhExp of lighthouseExperiences) {
+            try {
+              const info = await getExperienceInfo(lhExp.address, account);
+              allExperiences.set(lhExp.address.toLowerCase(), info);
+            } catch (err) {
+              const fallback = experienceFromIndex(lhExp, account);
+              allExperiences.set(lhExp.address.toLowerCase(), fallback);
+            }
           }
-        }, 2000);
+        }
+        
+        // Add/update with recent blockchain data
+        for (const recentExp of recentExperiences) {
+          allExperiences.set(recentExp.address.toLowerCase(), recentExp);
+        }
+
+        // If still no data, check known experiences
+        if (allExperiences.size === 0) {
+          setLoading('Loading known experiences...');
+          setDataSource('known');
+          const knownCreated = await loadKnownExperiences();
+          const knownPurchased = await loadPurchasedExperiences();
+          
+          for (const exp of knownCreated) {
+            allExperiences.set(exp.address.toLowerCase(), exp);
+          }
+          for (const exp of knownPurchased) {
+            allExperiences.set(exp.address.toLowerCase(), exp);
+          }
+        } else {
+          setDataSource(lighthouseLoaded && recentExperiences.length > 0 ? 'hybrid' : lighthouseLoaded ? 'lighthouse' : 'blockchain');
+        }
+
+        // Convert to arrays and separate created vs purchased
+        const allExpArray = Array.from(allExperiences.values());
+        const created = allExpArray.filter(exp => exp.isCreator);
+        const purchased = allExpArray.filter(exp => exp.passBalance > 0n && !exp.isCreator);
+
+        setCreatedExperiences(created);
+        setPurchasedExperiences(purchased);
+
+        // PHASE 4: AUTO-SYNC - Save new blockchain findings to Lighthouse
+        if (lighthouseEnabled && recentExperiences.length > 0) {
+          try {
+            await syncExperiencesToLighthouse(created);
+            console.log('✅ Synced new experiences to Lighthouse');
+          } catch (err) {
+            console.warn('Failed to sync to Lighthouse:', err);
+          }
+        }
       }
-      
-      // Load purchased experiences from known addresses
-      await loadPurchasedExperiences();
-      
+
     } catch (err: any) {
       console.error('Failed to load experiences:', err);
       setError('Failed to load experiences: ' + err.message);
     } finally {
       setLoading('');
+      setLighthouseLoading(false);
+      setBlockchainLoading(false);
     }
   }
 
@@ -208,11 +278,11 @@ export default function CreatorDashboard() {
     ];
 
     const created: ExperienceInfo[] = [];
-    
+
     for (const address of knownAddresses) {
       try {
         const info = await getExperienceInfo(address, account);
-        
+
         // Only add to created if user is the creator
         if (info.isCreator) {
           created.push(info);
@@ -221,245 +291,182 @@ export default function CreatorDashboard() {
         console.error('Failed to load known experience:', address, err);
       }
     }
-    
+
     return created;
   }
 
   async function loadPurchasedExperiences() {
-    if (!account) return;
-
-    const purchasesMap = new Map<string, ExperienceInfo>();
-
-    const lighthousePurchases = await loadPurchasesFromLighthouse();
-
-    for (const purchase of lighthousePurchases) {
-      try {
-        const info = await getExperienceInfo(purchase.experience, account);
-        const key = purchase.experience.toLowerCase();
-        const withBalance = info.passBalance > 0n
-          ? info
-          : { ...info, passBalance: BigInt(purchase.totalQuantity || 0), isOwned: (purchase.totalQuantity || 0) > 0 };
-        purchasesMap.set(key, withBalance);
-      } catch (err) {
-        console.warn('Fallback to Lighthouse data for purchase:', purchase.experience, err);
-        const fallback = experienceFromPurchase(purchase, account);
-        purchasesMap.set(purchase.experience.toLowerCase(), fallback);
-      }
-    }
-
-    // Known experiences fallback (useful for first-time loads)
+    // Load purchased experiences from known addresses
     const knownAddresses = [
       '0x5455558b5ca1E0622d63857d15a7cBcE5eE1322A',
       '0xBA0182EEfF04A8d7BAA04Afcc4BBCd0ac74Ce88F',
     ];
 
-    for (const address of knownAddresses) {
-      const key = address.toLowerCase();
-      if (purchasesMap.has(key)) continue;
+    const purchased: ExperienceInfo[] = [];
 
+    for (const address of knownAddresses) {
       try {
         const info = await getExperienceInfo(address, account);
-        if (info.passBalance > 0n && !info.isCreator) {
-          purchasesMap.set(key, info);
+
+        // Only add to purchased if user owns passes but didn't create it
+        if (info.passBalance > 0 && !info.isCreator) {
+          purchased.push(info);
         }
       } catch (err) {
-        console.warn('Known purchase lookup failed:', address, err);
+        console.error('Failed to load known experience:', address, err);
       }
     }
 
-    setPurchasedExperiences(Array.from(purchasesMap.values()));
+    setPurchasedExperiences(purchased);
   }
 
   async function getExperienceInfo(address: string, userAccount: string): Promise<ExperienceInfo> {
-    const contract = {
-      address: address as `0x${string}`,
-      abi: ExperienceAbi.abi,
-    };
-
-    const [owner, cid, priceEthWei, currentProposer, passBalance] = await Promise.all([
-      publicClient.readContract({ ...contract, functionName: 'owner' }),
-      publicClient.readContract({ ...contract, functionName: 'cid' }),
-      publicClient.readContract({ ...contract, functionName: 'priceEthWei' }),
-      publicClient.readContract({ ...contract, functionName: 'currentProposer' }),
-      publicClient.readContract({ 
-        ...contract, 
-        functionName: 'balanceOf', 
-        args: [userAccount as `0x${string}`, 1n] 
-      })
-    ]);
-
-    return {
-      address,
-      owner: owner as string,
-      cid: cid as string,
-      priceEthWei: priceEthWei as bigint,
-      currentProposer: currentProposer as string,
-      isOwned: (passBalance as bigint) > 0,
-      passBalance: passBalance as bigint,
-      isCreator: (owner as string).toLowerCase() === userAccount.toLowerCase()
-    };
-  }
-
-  function parsePriceToWei(price?: string): bigint {
-    if (!price) return 0n;
     try {
-      return parseEther(price);
+      const [owner, cid, priceEthWei, currentProposer, passBalance] = await Promise.all([
+        publicClient.readContract({
+          address: address as `0x${string}`,
+          abi: ExperienceAbi.abi,
+          functionName: 'owner',
+        }),
+        publicClient.readContract({
+          address: address as `0x${string}`,
+          abi: ExperienceAbi.abi,
+          functionName: 'cid',
+        }),
+        publicClient.readContract({
+          address: address as `0x${string}`,
+          abi: ExperienceAbi.abi,
+          functionName: 'priceEthWei',
+        }),
+        publicClient.readContract({
+          address: address as `0x${string}`,
+          abi: ExperienceAbi.abi,
+          functionName: 'currentProposer',
+        }),
+        publicClient.readContract({
+          address: address as `0x${string}`,
+          abi: ExperienceAbi.abi,
+          functionName: 'balanceOf',
+          args: [userAccount as `0x${string}`, 1n],
+        }),
+      ]);
+
+      return {
+        address,
+        owner: owner as string,
+        cid: cid as string,
+        priceEthWei: priceEthWei as bigint,
+        currentProposer: currentProposer as string,
+        isOwned: (passBalance as bigint) > 0n,
+        passBalance: passBalance as bigint,
+        isCreator: (owner as string).toLowerCase() === userAccount.toLowerCase(),
+      };
     } catch (err) {
-      console.warn('Failed to parse price, defaulting to 0:', err);
-      return 0n;
+      console.error('Failed to get experience info:', address, err);
+      throw err;
     }
   }
 
-  function experienceFromIndex(
-    index: ExperienceIndex,
-    userAccount: string,
-    passBalance: bigint = 0n
-  ): ExperienceInfo {
-    const lowerCreator = index.creator?.toLowerCase?.() || '';
+  function experienceFromIndex(lhExp: ExperienceIndex, userAccount: string): ExperienceInfo {
     return {
-      address: index.address,
-      owner: index.creator || ZERO_ADDRESS,
-      cid: index.cid || '',
-      priceEthWei: parsePriceToWei(index.metadata?.priceEth),
+      address: lhExp.address,
+      owner: lhExp.creator,
+      cid: lhExp.cid || '',
+      priceEthWei: lhExp.priceEth ? parseEther(lhExp.priceEth) : 0n,
       currentProposer: ZERO_ADDRESS,
-      isOwned: passBalance > 0n,
-      passBalance,
-      isCreator: lowerCreator === userAccount.toLowerCase(),
+      isOwned: false,
+      passBalance: 0n,
+      isCreator: lhExp.creator.toLowerCase() === userAccount.toLowerCase(),
     };
   }
 
-  function experienceFromPurchase(
-    purchase: PurchaseIndex,
-    userAccount: string
-  ): ExperienceInfo {
-    const balance = BigInt(purchase.totalQuantity || 0);
-    const owner = purchase.creator || ZERO_ADDRESS;
-    return {
-      address: purchase.experience,
-      owner,
-      cid: purchase.cid || '',
-      priceEthWei: parsePriceToWei(purchase.priceEth),
-      currentProposer: ZERO_ADDRESS,
-      isOwned: balance > 0n,
-      passBalance: balance,
-      isCreator: owner.toLowerCase() === userAccount.toLowerCase(),
+  // Lighthouse functions
+  async function loadFromLighthouse(): Promise<ExperienceIndex[]> {
+    if (!lighthouseHash) return [];
+    return await lighthouseService.loadCreatorExperienceList(lighthouseHash);
+  }
+
+  async function syncExperiencesToLighthouse(experiences: ExperienceInfo[]) {
+    if (!account) return;
+    
+    const lighthouseData: ExperienceIndex[] = experiences.map(exp => ({
+      address: exp.address,
+      creator: exp.owner,
+      cid: exp.cid,
+      priceEth: exp.priceEthWei > 0n ? formatEther(exp.priceEthWei) : undefined,
+      createdAt: Date.now(),
+    }));
+
+    const newHash = await lighthouseService.saveCreatorExperienceList(account, lighthouseData);
+    if (newHash) {
+      setLighthouseHash(newHash);
+      lighthouseService.saveHashToLocalStorage(account, newHash);
+    }
+  }
+
+  async function addExperienceToLighthouse(experience: ExperienceInfo) {
+    if (!account) return;
+    
+    const lighthouseData: ExperienceIndex = {
+      address: experience.address,
+      creator: experience.owner,
+      cid: experience.cid,
+      priceEth: experience.priceEthWei > 0n ? formatEther(experience.priceEthWei) : undefined,
+      createdAt: Date.now(),
     };
-  }
 
-  async function updatePrice(experienceAddress: string, newPriceEth: string) {
-    if (!account || !wallet) return;
-    
-    try {
-      setLoading('Updating price...');
-
-      const priceWei = BigInt(Math.floor(parseFloat(newPriceEth) * 1e18));
-      
-      const { request } = await publicClient.simulateContract({
-        address: experienceAddress as `0x${string}`,
-        abi: ExperienceAbi.abi,
-        functionName: 'setPriceEthWei',
-        args: [priceWei],
-        account: account as `0x${string}`,
-      });
-
-      const hash = await wallet.writeContract(request);
-      await publicClient.waitForTransactionReceipt({ hash });
-      
-      // Refresh the experience data
-      await loadExperiences();
-      setEditingExperience('');
-      setEditPrice('');
-      
-    } catch (err: any) {
-      setError('Failed to update price: ' + err.message);
-    } finally {
-      setLoading('');
+    const newHash = await lighthouseService.addExperienceToList(account, lighthouseData, lighthouseHash);
+    if (newHash) {
+      setLighthouseHash(newHash);
+      lighthouseService.saveHashToLocalStorage(account, newHash);
     }
   }
 
-  async function updateCid(experienceAddress: string, newCid: string) {
-    if (!account || !wallet) return;
+  // Check Lighthouse setup
+  async function checkLighthouseSetup() {
+    if (!account) return;
     
     try {
-      setLoading('Updating content...');
-
-      const { request } = await publicClient.simulateContract({
-        address: experienceAddress as `0x${string}`,
-        abi: ExperienceAbi.abi,
-        functionName: 'setCid',
-        args: [newCid],
-        account: account as `0x${string}`,
-      });
-
-      const hash = await wallet.writeContract(request);
-      await publicClient.waitForTransactionReceipt({ hash });
-      
-      // Refresh the experience data
-      await loadExperiences();
-      setEditingExperience('');
-      setEditCid('');
-      
-    } catch (err: any) {
-      setError('Failed to update content: ' + err.message);
-    } finally {
-      setLoading('');
+      const hash = lighthouseService.loadHashFromLocalStorage(account);
+      if (hash) {
+        setLighthouseHash(hash);
+        setLighthouseEnabled(true);
+      }
+    } catch (err) {
+      console.warn('Lighthouse setup check failed:', err);
     }
   }
 
-  async function updateProposer(experienceAddress: string, newProposer: string) {
-    if (!account || !wallet) return;
+  async function setupLighthouse() {
+    if (!account) return;
     
     try {
-      setLoading('Updating proposer...');
-
-      const { request } = await publicClient.simulateContract({
-        address: experienceAddress as `0x${string}`,
-        abi: ExperienceAbi.abi,
-        functionName: 'setCurrentProposer',
-        args: [newProposer as `0x${string}`],
-        account: account as `0x${string}`,
-      });
-
-      const hash = await wallet.writeContract(request);
-      await publicClient.waitForTransactionReceipt({ hash });
-      
-      // Refresh the experience data
-      await loadExperiences();
-      setEditingExperience('');
-      setEditProposer('');
-      
-    } catch (err: any) {
-      setError('Failed to update proposer: ' + err.message);
-    } finally {
-      setLoading('');
+      const apiKey = await promptForApiKey();
+      if (apiKey) {
+        setLighthouseEnabled(true);
+        setShowLighthouseSetup(false);
+        // Trigger initial sync
+        await loadExperiences();
+      }
+    } catch (err) {
+      console.error('Lighthouse setup failed:', err);
     }
   }
 
+  // Manual experience addition
   async function addManualExperience() {
     if (!manualAddress || !account) return;
     
     try {
       setLoading('Adding experience...');
-      
-      // Validate address format
-      if (!manualAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
-        setError('Invalid contract address format');
-        return;
-      }
-      
-      // Check if already in the list
-      if (createdExperiences.find(exp => exp.address.toLowerCase() === manualAddress.toLowerCase())) {
-        setError('Experience already in your list');
-        return;
-      }
-      
       const info = await getExperienceInfo(manualAddress, account);
       
       if (info.isCreator) {
         setCreatedExperiences(prev => [...prev, info]);
-        // Sync to Lighthouse
-        await addExperienceToLighthouse(info);
-      } else if (info.isOwned) {
+        if (lighthouseEnabled) {
+          await addExperienceToLighthouse(info);
+        }
+      } else if (info.passBalance > 0n) {
         setPurchasedExperiences(prev => [...prev, info]);
       } else {
         setError('You are not the creator or owner of this experience');
@@ -468,7 +475,6 @@ export default function CreatorDashboard() {
       
       setManualAddress('');
       setShowAddExperience(false);
-      
     } catch (err: any) {
       setError('Failed to add experience: ' + err.message);
     } finally {
@@ -476,647 +482,362 @@ export default function CreatorDashboard() {
     }
   }
 
+  // Edit functions
+  async function updatePrice(experienceAddress: string) {
+    if (!wallet || !account || !editPrice) return;
+    
+    try {
+      setLoading('Updating price...');
+      const priceWei = parseEther(editPrice);
+      
+      const { request } = await publicClient.simulateContract({
+        address: experienceAddress as `0x${string}`,
+        abi: ExperienceAbi.abi,
+        functionName: 'setPriceEthWei',
+        args: [priceWei],
+        account: account as `0x${string}`,
+      });
+      
+      const hash = await wallet.writeContract(request);
+      await publicClient.waitForTransactionReceipt({ hash });
+      
+      // Refresh data
+      await loadExperiences();
+      setEditingExperience('');
+      setEditPrice('');
+    } catch (err: any) {
+      setError('Failed to update price: ' + err.message);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function updateCid(experienceAddress: string) {
+    if (!wallet || !account || !editCid) return;
+    
+    try {
+      setLoading('Updating CID...');
+      
+      const { request } = await publicClient.simulateContract({
+        address: experienceAddress as `0x${string}`,
+        abi: ExperienceAbi.abi,
+        functionName: 'setCid',
+        args: [editCid],
+        account: account as `0x${string}`,
+      });
+      
+      const hash = await wallet.writeContract(request);
+      await publicClient.waitForTransactionReceipt({ hash });
+      
+      // Refresh data
+      await loadExperiences();
+      setEditingExperience('');
+      setEditCid('');
+    } catch (err: any) {
+      setError('Failed to update CID: ' + err.message);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function updateProposer(experienceAddress: string) {
+    if (!wallet || !account) return;
+    
+    try {
+      setLoading('Updating proposer...');
+      const proposerAddress = editProposer || ZERO_ADDRESS;
+      
+      const { request } = await publicClient.simulateContract({
+        address: experienceAddress as `0x${string}`,
+        abi: ExperienceAbi.abi,
+        functionName: 'setCurrentProposer',
+        args: [proposerAddress as `0x${string}`],
+        account: account as `0x${string}`,
+      });
+      
+      const hash = await wallet.writeContract(request);
+      await publicClient.waitForTransactionReceipt({ hash });
+      
+      // Refresh data
+      await loadExperiences();
+      setEditingExperience('');
+      setEditProposer('');
+    } catch (err: any) {
+      setError('Failed to update proposer: ' + err.message);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  // Effects
   useEffect(() => {
-    if (isConnected && !isWrongNetwork) {
+    if (isConnected && !isWrongNetwork && account) {
       checkLighthouseSetup();
       loadExperiences();
-    } else if (!isConnected) {
-      clearExperiences();
     }
   }, [isConnected, isWrongNetwork, account]);
 
-  async function checkLighthouseSetup() {
-    if (!account) return;
-    
-    const enabled = isLighthouseAvailable();
-    setLighthouseEnabled(enabled);
-    
-    if (enabled) {
-      // Load existing hash from localStorage
-      const hash = lighthouseService.loadHashFromLocalStorage(account);
-      if (hash) {
-        setLighthouseHash(hash);
-        console.log('Found existing Lighthouse hash:', hash);
+  useEffect(() => {
+    if (!account) {
+      setPurchaseHash('');
+      return;
+    }
+
+    try {
+      const stored = lighthouseService.loadPurchaseHashFromLocalStorage(account);
+      if (stored) {
+        setPurchaseHash(stored);
       }
-
-      const purchase = lighthouseService.loadPurchaseHashFromLocalStorage(account);
-      if (purchase) {
-        setPurchaseHash(purchase);
-        console.log('Found existing purchase hash:', purchase);
-      }
+    } catch (err) {
+      console.warn('Purchase hash lookup failed:', err);
     }
+  }, [account]);
+
+  if (!isConnected) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <h1 style={{ marginBottom: '20px' }}>🎨 Creator Dashboard</h1>
+        <p style={{ marginBottom: '30px', color: '#6b7280' }}>
+          Connect your wallet to manage your experiences
+        </p>
+        <WalletButton size="lg" />
+      </div>
+    );
   }
 
-  async function setupLighthouse() {
-    const apiKey = promptForApiKey();
-    if (apiKey) {
-      setLighthouseEnabled(true);
-      setShowLighthouseSetup(false);
-      
-      // Try to sync current experiences to Lighthouse
-      if (createdExperiences.length > 0) {
-        await syncExperiencesToLighthouse();
-      }
-    }
+  if (isWrongNetwork) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <h1 style={{ marginBottom: '20px' }}>🎨 Creator Dashboard</h1>
+        <p style={{ marginBottom: '30px', color: '#dc2626' }}>
+          Please switch to Sepolia network
+        </p>
+        <WalletButton size="lg" />
+      </div>
+    );
   }
 
-  async function loadFromLighthouse(): Promise<ExperienceIndex[]> {
-    if (!lighthouseEnabled || !lighthouseHash || !account) {
-      return [];
-    }
-
-    try {
-      setLoading('Loading from Lighthouse...');
-      const data = await lighthouseService.loadCreatorExperienceList(lighthouseHash);
-      
-      console.log(`Loaded ${data.experiences.length} experiences from Lighthouse`);
-      return data.experiences || [];
-    } catch (error: any) {
-      console.error('Failed to load from Lighthouse:', error);
-      // Don't show error to user for Lighthouse failures
-      return [];
-    }
-  }
-
-  async function loadPurchasesFromLighthouse(): Promise<PurchaseIndex[]> {
-    if (!lighthouseEnabled || !purchaseHash || !account) {
-      return [];
-    }
-
-    try {
-      const data = await lighthouseService.loadPurchasedExperienceList(purchaseHash);
-      console.log(`Loaded ${data.purchases.length} purchases from Lighthouse`);
-      return data.purchases || [];
-    } catch (error: any) {
-      console.error('Failed to load purchases from Lighthouse:', error);
-      return [];
-    }
-  }
-
-  async function syncExperiencesToLighthouse() {
-    if (!lighthouseEnabled || !account) return;
-
-    try {
-      const experienceIndexes: ExperienceIndex[] = createdExperiences.map(exp => ({
-        address: exp.address,
-        creator: exp.owner,
-        cid: exp.cid,
-        createdAt: Date.now(), // We don't have the actual creation time, use current
-        metadata: {
-          priceEth: formatEther(exp.priceEthWei)
-        }
-      }));
-
-      const hash = await lighthouseService.saveCreatorExperienceList(account, experienceIndexes);
-      setLighthouseHash(hash);
-      lighthouseService.saveHashToLocalStorage(account, hash);
-      
-      console.log('Synced experiences to Lighthouse:', hash);
-    } catch (error: any) {
-      console.error('Failed to sync to Lighthouse:', error);
-      setError('Failed to sync to Lighthouse: ' + error.message);
-    }
-  }
-
-  async function addExperienceToLighthouse(experienceInfo: ExperienceInfo) {
-    if (!lighthouseEnabled || !account) return;
-
-    try {
-      const experienceIndex: ExperienceIndex = {
-        address: experienceInfo.address,
-        creator: experienceInfo.owner,
-        cid: experienceInfo.cid,
-        createdAt: Date.now(),
-        metadata: {
-          priceEth: formatEther(experienceInfo.priceEthWei)
-        }
-      };
-
-      const hash = await lighthouseService.addExperienceToList(
-        account, 
-        experienceIndex, 
-        lighthouseHash || undefined
-      );
-      
-      setLighthouseHash(hash);
-      lighthouseService.saveHashToLocalStorage(account, hash);
-      
-      console.log('Added experience to Lighthouse:', hash);
-    } catch (error: any) {
-      console.error('Failed to add to Lighthouse:', error);
-      // Don't break the flow for Lighthouse errors
-    }
-  }
-
-  const renderExperienceCard = (exp: ExperienceInfo, showEditOptions: boolean = false) => (
-    <div key={exp.address} style={{
-      padding: '24px',
-      border: '1px solid #e5e7eb',
-      borderRadius: '12px',
-      backgroundColor: 'white',
-      marginBottom: '16px'
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-        <div style={{ flex: 1 }}>
-          <h3 style={{ margin: '0 0 8px 0', color: '#1e293b', fontSize: '18px', fontWeight: '600' }}>
-            {exp.cid.startsWith('ipfs://') ? exp.cid.replace('ipfs://', '') : exp.cid}
-          </h3>
-          <div style={{ display: 'grid', gap: '4px', fontSize: '14px', color: '#6b7280' }}>
-            <div><strong>Address:</strong> {exp.address}</div>
-            <div><strong>Price:</strong> {formatEther(exp.priceEthWei)} ETH</div>
-            {exp.currentProposer !== '0x0000000000000000000000000000000000000000' && (
-              <div><strong>Proposer:</strong> {exp.currentProposer}</div>
-            )}
-            {exp.isOwned && (
-              <div style={{ color: '#10b981', fontWeight: '500' }}>
-                <strong>Your Passes:</strong> {exp.passBalance.toString()}
-              </div>
-            )}
-          </div>
+  return (
+    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        marginBottom: '30px',
+        paddingBottom: '20px',
+        borderBottom: '1px solid #e5e7eb'
+      }}>
+        <div>
+          <h1 style={{ margin: '0 0 8px 0', fontSize: '32px' }}>🎨 Creator Dashboard</h1>
+          <p style={{ margin: '0', color: '#6b7280' }}>
+            Manage your experiences and track purchases
+          </p>
         </div>
-        
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {exp.isCreator && (
-            <span style={{
-              padding: '4px 8px',
-              backgroundColor: '#10b981',
-              color: 'white',
-              borderRadius: '12px',
-              fontSize: '12px',
-              fontWeight: '500'
-            }}>
-              Creator
-            </span>
-          )}
-          {exp.isOwned && (
-            <span style={{
-              padding: '4px 8px',
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              borderRadius: '12px',
-              fontSize: '12px',
-              fontWeight: '500'
-            }}>
-              Owned
-            </span>
-          )}
+        <WalletButton size="md" />
+      </div>
+
+      {/* Data Source Indicator */}
+      <div style={{
+        marginBottom: '20px',
+        padding: '12px',
+        borderRadius: '8px',
+        backgroundColor: dataSource === 'lighthouse' ? '#f0fdf4' : 
+                         dataSource === 'blockchain' ? '#fef3c7' :
+                         dataSource === 'hybrid' ? '#dbeafe' : '#f3f4f6',
+        border: `1px solid ${dataSource === 'lighthouse' ? '#22c55e' : 
+                             dataSource === 'blockchain' ? '#f59e0b' :
+                             dataSource === 'hybrid' ? '#3b82f6' : '#9ca3af'}`
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {dataSource === 'lighthouse' && <span>📦</span>}
+          {dataSource === 'blockchain' && <span>🔗</span>}
+          {dataSource === 'hybrid' && <span>⚡</span>}
+          {dataSource === 'known' && <span>📋</span>}
+          <span style={{ fontWeight: '500' }}>
+            Data Source: {dataSource === 'lighthouse' ? 'Lighthouse (Instant)' :
+                         dataSource === 'blockchain' ? 'Blockchain (Recent)' :
+                         dataSource === 'hybrid' ? 'Hybrid (Lighthouse + Blockchain)' :
+                         'Known Experiences'}
+          </span>
+          {lighthouseLoading && <span style={{ fontSize: '12px', color: '#6b7280' }}>📦 Loading...</span>}
+          {blockchainLoading && <span style={{ fontSize: '12px', color: '#6b7280' }}>🔗 Syncing...</span>}
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-        <a
-          href={`/experience/${exp.address}/buy`}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#6366f1',
-            color: 'white',
-            textDecoration: 'none',
-            borderRadius: '6px',
-            fontSize: '14px',
-            fontWeight: '500'
-          }}
-        >
-          🎫 View Experience
-        </a>
-        
-        {exp.isCreator && (
-          <>
-            <a
-              href={`/experience/${exp.address}/settings`}
+      {/* Lighthouse Setup */}
+      {!lighthouseEnabled && (
+        <div style={{
+          marginBottom: '20px',
+          padding: '16px',
+          backgroundColor: '#fef3c7',
+          borderRadius: '8px',
+          border: '1px solid #f59e0b'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ margin: '0 0 4px 0', color: '#92400e' }}>🚀 Enable Lighthouse Sync</h3>
+              <p style={{ margin: '0', color: '#92400e', fontSize: '14px' }}>
+                Sync your experiences across devices and get instant loading
+              </p>
+            </div>
+            <button
+              onClick={() => setShowLighthouseSetup(true)}
               style={{
                 padding: '8px 16px',
                 backgroundColor: '#f59e0b',
                 color: 'white',
-                textDecoration: 'none',
+                border: 'none',
                 borderRadius: '6px',
-                fontSize: '14px',
-                fontWeight: '500'
+                cursor: 'pointer',
+                fontSize: '14px'
               }}
             >
-              ⚙️ Settings
-            </a>
-            
-            {showEditOptions && (
-              <button
-                onClick={() => {
-                  setEditingExperience(exp.address);
-                  setEditPrice(formatEther(exp.priceEthWei));
-                  setEditCid(exp.cid);
-                  setEditProposer(exp.currentProposer);
-                }}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#10b981',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  cursor: 'pointer'
-                }}
-              >
-                ✏️ Quick Edit
-              </button>
-            )}
-          </>
-        )}
-        
-        <a
-          href={`https://sepolia.etherscan.io/address/${exp.address}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#6b7280',
-            color: 'white',
-            textDecoration: 'none',
-            borderRadius: '6px',
-            fontSize: '14px',
-            fontWeight: '500'
-          }}
-        >
-          🔗 Etherscan
-        </a>
-      </div>
-    </div>
-  );
+              Enable Sync
+            </button>
+          </div>
+        </div>
+      )}
 
-  return (
-    <div style={{ 
-      minHeight: '100vh', 
-      backgroundColor: '#f8fafc', 
-      padding: '20px',
-      fontFamily: 'system-ui, -apple-system, sans-serif'
-    }}>
-      {/* Header */}
-      <div style={{ 
-        maxWidth: '1200px', 
-        margin: '0 auto', 
-        marginBottom: '30px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '20px',
-        backgroundColor: 'white',
-        borderRadius: '12px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <h1 style={{ margin: 0, color: '#1e293b', fontSize: '24px', fontWeight: '600' }}>
-            🎨 Creator Dashboard
-          </h1>
-          <a 
-            href="/create"
+      {/* Lighthouse Setup Modal */}
+      {showLighthouseSetup && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            maxWidth: '500px',
+            width: '90%'
+          }}>
+            <h2 style={{ margin: '0 0 16px 0' }}>🚀 Setup Lighthouse Sync</h2>
+            <p style={{ margin: '0 0 20px 0', color: '#6b7280' }}>
+              Enter your Lighthouse API key to enable cross-device sync and instant loading.
+            </p>
+            <button
+              onClick={setupLighthouse}
+              style={{
+                width: '100%',
+                padding: '12px',
+                backgroundColor: '#059669',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '16px',
+                marginBottom: '12px'
+              }}
+            >
+              Enter API Key
+            </button>
+            <button
+              onClick={() => setShowLighthouseSetup(false)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                backgroundColor: '#6b7280',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '16px'
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Loading and Error States */}
+      {loading && (
+        <div style={{
+          padding: '20px',
+          textAlign: 'center',
+          backgroundColor: '#f8fafc',
+          borderRadius: '8px',
+          marginBottom: '20px'
+        }}>
+          <p style={{ margin: '0', color: '#4b5563' }}>{loading}</p>
+        </div>
+      )}
+
+      {error && (
+        <div style={{
+          padding: '16px',
+          backgroundColor: '#fef2f2',
+          borderRadius: '8px',
+          border: '1px solid #fca5a5',
+          marginBottom: '20px'
+        }}>
+          <p style={{ margin: '0', color: '#dc2626' }}>❌ {error}</p>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div style={{ marginBottom: '30px' }}>
+        <div style={{ display: 'flex', gap: '4px', marginBottom: '20px' }}>
+          <button
+            onClick={() => setActiveTab('created')}
             style={{
-              padding: '12px 20px',
-              backgroundColor: '#10b981',
-              color: 'white',
-              textDecoration: 'none',
-              borderRadius: '8px',
-              fontSize: '16px',
-              fontWeight: '600'
+              padding: '12px 24px',
+              backgroundColor: activeTab === 'created' ? '#059669' : '#f3f4f6',
+              color: activeTab === 'created' ? 'white' : '#374151',
+              border: 'none',
+              borderRadius: '8px 8px 0 0',
+              cursor: 'pointer',
+              fontWeight: '500'
             }}
           >
-            🌍 Create New Experience
-          </a>
+            🎨 Created ({createdExperiences.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('purchased')}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: activeTab === 'purchased' ? '#059669' : '#f3f4f6',
+              color: activeTab === 'purchased' ? 'white' : '#374151',
+              border: 'none',
+              borderRadius: '8px 8px 0 0',
+              cursor: 'pointer',
+              fontWeight: '500'
+            }}
+          >
+            🎫 Purchased ({purchasedExperiences.length})
+          </button>
         </div>
-        
-        {/* Wallet Status */}
-        <WalletButton size="md" />
-      </div>
 
-      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-        {!isConnected ? (
-          <div style={{
-            textAlign: 'center',
-            padding: '60px 20px',
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-          }}>
-            <div style={{ fontSize: '64px', marginBottom: '16px' }}>👛</div>
-            <h2 style={{ margin: '0 0 8px 0', color: '#1e293b' }}>Connect Your Wallet</h2>
-            <p style={{ margin: '0', color: '#6b7280' }}>
-              Connect your wallet to view and manage your experiences
-            </p>
-          </div>
-        ) : isWrongNetwork ? (
-          <div style={{
-            textAlign: 'center',
-            padding: '60px 20px',
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-          }}>
-            <div style={{ fontSize: '64px', marginBottom: '16px' }}>🔗</div>
-            <h2 style={{ margin: '0 0 8px 0', color: '#1e293b' }}>Wrong Network</h2>
-            <p style={{ margin: '0 0 20px 0', color: '#6b7280' }}>
-              Please switch to Sepolia testnet to continue
-            </p>
-            <WalletButton size="lg" />
-          </div>
-        ) : (
-          <>
-            {/* Tabs */}
-            <div style={{
-              backgroundColor: 'white',
-              borderRadius: '12px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-              marginBottom: '20px',
-              overflow: 'hidden'
-            }}>
-              <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb' }}>
-                <button
-                  onClick={() => setActiveTab('created')}
-                  style={{
-                    flex: 1,
-                    padding: '16px 24px',
-                    backgroundColor: activeTab === 'created' ? '#6366f1' : 'transparent',
-                    color: activeTab === 'created' ? 'white' : '#6b7280',
-                    border: 'none',
-                    fontSize: '16px',
-                    fontWeight: '600',
-                    cursor: 'pointer'
-                  }}
-                >
-                  🎨 Created Experiences ({createdExperiences.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab('purchased')}
-                  style={{
-                    flex: 1,
-                    padding: '16px 24px',
-                    backgroundColor: activeTab === 'purchased' ? '#6366f1' : 'transparent',
-                    color: activeTab === 'purchased' ? 'white' : '#6b7280',
-                    border: 'none',
-                    fontSize: '16px',
-                    fontWeight: '600',
-                    cursor: 'pointer'
-                  }}
-                >
-                  🎫 Purchased Experiences ({purchasedExperiences.length})
-                </button>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div style={{
-              backgroundColor: 'white',
-              borderRadius: '12px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-              padding: '24px'
-            }}>
-              {activeTab === 'created' ? (
-                <div>
-                  <div style={{ marginBottom: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                      <h2 style={{ margin: 0, color: '#1e293b' }}>
-                        Your Created Experiences
-                      </h2>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        {!lighthouseEnabled && (
-                          <button
-                            onClick={() => setShowLighthouseSetup(true)}
-                            style={{
-                              padding: '6px 12px',
-                              backgroundColor: '#f59e0b',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '6px',
-                              fontSize: '12px',
-                              fontWeight: '500',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            ☁️ Enable Sync
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setShowAddExperience(true)}
-                          style={{
-                            padding: '8px 16px',
-                            backgroundColor: '#6366f1',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            fontSize: '14px',
-                            fontWeight: '500',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          + Add Experience
-                        </button>
-                      </div>
-                    </div>
-                    
-                    {/* Lighthouse Status */}
-                    {lighthouseEnabled && (
-                      <div style={{
-                        padding: '8px 12px',
-                        backgroundColor: '#f0fdf4',
-                        border: '1px solid #bbf7d0',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        color: '#166534',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}>
-                        <span>☁️ Lighthouse sync enabled</span>
-                        {lighthouseHash && (
-                          <span style={{ fontFamily: 'monospace', fontSize: '10px' }}>
-                            ({lighthouseHash.slice(0, 8)}...)
-                          </span>
-                        )}
-                        <button
-                          onClick={syncExperiencesToLighthouse}
-                          disabled={loading !== ''}
-                          style={{
-                            marginLeft: 'auto',
-                            padding: '2px 6px',
-                            backgroundColor: '#10b981',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            fontSize: '10px',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Sync Now
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {createdExperiences.length === 0 ? (
-                    <div style={{
-                      textAlign: 'center',
-                      padding: '40px 20px',
-                      color: '#6b7280'
-                    }}>
-                      <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎨</div>
-                      <h3 style={{ margin: '0 0 8px 0', color: '#374151' }}>No Experiences Created Yet</h3>
-                      <p style={{ margin: '0 0 20px 0' }}>
-                        Start creating amazing travel experiences for your community
-                      </p>
-                      <a 
-                        href="/create"
-                        style={{
-                          padding: '12px 24px',
-                          backgroundColor: '#10b981',
-                          color: 'white',
-                          textDecoration: 'none',
-                          borderRadius: '8px',
-                          fontSize: '16px',
-                          fontWeight: '600'
-                        }}
-                      >
-                        🌍 Create Your First Experience
-                      </a>
-                    </div>
-                  ) : (
-                    createdExperiences.map(exp => renderExperienceCard(exp, true))
-                  )}
-                </div>
-              ) : (
-                <div>
-                  <h2 style={{ margin: '0 0 20px 0', color: '#1e293b' }}>
-                    Experiences You Own
-                  </h2>
-                  
-                  {purchasedExperiences.length === 0 ? (
-                    <div style={{
-                      textAlign: 'center',
-                      padding: '40px 20px',
-                      color: '#6b7280'
-                    }}>
-                      <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎫</div>
-                      <h3 style={{ margin: '0 0 8px 0', color: '#374151' }}>No Passes Owned</h3>
-                      <p style={{ margin: '0 0 20px 0' }}>
-                        Purchase passes to access exclusive travel experiences
-                      </p>
-                      <a 
-                        href="/experience"
-                        style={{
-                          padding: '12px 24px',
-                          backgroundColor: '#3b82f6',
-                          color: 'white',
-                          textDecoration: 'none',
-                          borderRadius: '8px',
-                          fontSize: '16px',
-                          fontWeight: '600'
-                        }}
-                      >
-                        🎫 Browse Experiences
-                      </a>
-                    </div>
-                  ) : (
-                    purchasedExperiences.map(exp => renderExperienceCard(exp, false))
-                  )}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
-        {/* Lighthouse Setup Modal */}
-        {showLighthouseSetup && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '20px'
-          }}>
-            <div style={{
-              backgroundColor: 'white',
-              borderRadius: '12px',
-              padding: '24px',
-              maxWidth: '500px',
-              width: '100%'
-            }}>
-              <h3 style={{ margin: '0 0 16px 0', color: '#1e293b' }}>
-                ☁️ Enable Lighthouse Sync
-              </h3>
-              <p style={{ margin: '0 0 20px 0', color: '#6b7280', lineHeight: '1.5' }}>
-                Lighthouse allows you to sync your experience list across devices using decentralized storage. 
-                Your data is stored on IPFS and accessible from any device.
-              </p>
-              
-              <div style={{
-                padding: '16px',
-                backgroundColor: '#f0fdf4',
-                border: '1px solid #bbf7d0',
+        {/* Add Experience Button */}
+        {activeTab === 'created' && (
+          <div style={{ marginBottom: '20px' }}>
+            <button
+              onClick={() => setShowAddExperience(true)}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                border: 'none',
                 borderRadius: '8px',
-                marginBottom: '20px'
-              }}>
-                <h4 style={{ margin: '0 0 8px 0', color: '#15803d', fontSize: '14px' }}>Benefits:</h4>
-                <ul style={{ margin: 0, paddingLeft: '20px', color: '#166534', fontSize: '14px' }}>
-                  <li>Access your experiences from any device</li>
-                  <li>Reduce blockchain queries (faster loading)</li>
-                  <li>Decentralized backup of your experience list</li>
-                  <li>Share experience lists with others</li>
-                </ul>
-              </div>
-
-              <div style={{
-                padding: '16px',
-                backgroundColor: '#fef3c7',
-                border: '1px solid #fcd34d',
-                borderRadius: '8px',
-                marginBottom: '20px',
-                fontSize: '14px',
-                color: '#92400e'
-              }}>
-                <strong>Get your free API key:</strong><br />
-                1. Visit <a href="https://www.lighthouse.storage/" target="_blank" rel="noopener noreferrer" style={{ color: '#92400e', textDecoration: 'underline' }}>lighthouse.storage</a><br />
-                2. Sign up for a free account<br />
-                3. Copy your API key and paste below
-              </div>
-
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button
-                  onClick={setupLighthouse}
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    backgroundColor: '#10b981',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: '500',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Setup Lighthouse
-                </button>
-                
-                <button
-                  onClick={() => setShowLighthouseSetup(false)}
-                  style={{
-                    padding: '12px 16px',
-                    backgroundColor: '#6b7280',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: '500',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Maybe Later
-                </button>
-              </div>
-            </div>
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              ➕ Add Experience
+            </button>
           </div>
         )}
 
-        {/* Add Experience Modal */}
+        {/* Manual Add Experience Modal */}
         {showAddExperience && (
           <div style={{
             position: 'fixed',
@@ -1128,73 +849,65 @@ export default function CreatorDashboard() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1000,
-            padding: '20px'
+            zIndex: 1000
           }}>
             <div style={{
               backgroundColor: 'white',
+              padding: '30px',
               borderRadius: '12px',
-              padding: '24px',
               maxWidth: '500px',
-              width: '100%'
+              width: '90%'
             }}>
-              <h3 style={{ margin: '0 0 16px 0', color: '#1e293b' }}>
-                Add Experience Contract
-              </h3>
-              <p style={{ margin: '0 0 20px 0', color: '#6b7280', fontSize: '14px' }}>
-                Enter the contract address of an experience you created or own passes for.
+              <h2 style={{ margin: '0 0 16px 0' }}>Add Experience</h2>
+              <p style={{ margin: '0 0 20px 0', color: '#6b7280' }}>
+                Enter the contract address of an experience you created or purchased.
               </p>
-              
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                  Contract Address
-                </label>
-                <input
-                  type="text"
-                  value={manualAddress}
-                  onChange={(e) => setManualAddress(e.target.value)}
-                  placeholder="0x..."
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '6px',
-                    fontFamily: 'monospace'
-                  }}
-                />
-              </div>
-
+              <input
+                type="text"
+                placeholder="0x..."
+                value={manualAddress}
+                onChange={(e) => setManualAddress(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  marginBottom: '20px'
+                }}
+              />
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button
                   onClick={addManualExperience}
-                  disabled={!manualAddress || loading !== ''}
+                  disabled={!manualAddress}
                   style={{
                     flex: 1,
                     padding: '12px',
-                    backgroundColor: !manualAddress || loading !== '' ? '#9ca3af' : '#10b981',
+                    backgroundColor: '#059669',
                     color: 'white',
                     border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: '500',
-                    cursor: !manualAddress || loading !== '' ? 'not-allowed' : 'pointer'
+                    borderRadius: '8px',
+                    cursor: manualAddress ? 'pointer' : 'not-allowed',
+                    fontSize: '16px',
+                    opacity: manualAddress ? 1 : 0.5
                   }}
                 >
-                  {loading || 'Add Experience'}
+                  Add
                 </button>
-                
                 <button
                   onClick={() => {
                     setShowAddExperience(false);
                     setManualAddress('');
                   }}
                   style={{
-                    padding: '12px 16px',
+                    flex: 1,
+                    padding: '12px',
                     backgroundColor: '#6b7280',
                     color: 'white',
                     border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: '500',
-                    cursor: 'pointer'
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '16px'
                   }}
                 >
                   Cancel
@@ -1204,211 +917,295 @@ export default function CreatorDashboard() {
           </div>
         )}
 
-        {/* Quick Edit Modal */}
-        {editingExperience && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '20px'
-          }}>
-            <div style={{
-              backgroundColor: 'white',
-              borderRadius: '12px',
-              padding: '24px',
-              maxWidth: '500px',
-              width: '100%',
-              maxHeight: '80vh',
-              overflow: 'auto'
-            }}>
-              <h3 style={{ margin: '0 0 20px 0', color: '#1e293b' }}>
-                Quick Edit Experience
-              </h3>
-              
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                  Price (ETH)
-                </label>
-                <input
-                  type="number"
-                  step="0.001"
-                  value={editPrice}
-                  onChange={(e) => setEditPrice(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '6px'
-                  }}
-                />
+        {/* Experience List */}
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '12px',
+          border: '1px solid #e5e7eb',
+          overflow: 'hidden'
+        }}>
+          {activeTab === 'created' ? (
+            createdExperiences.length > 0 ? (
+              createdExperiences.map((exp) => (
+                <div key={exp.address} style={{
+                  padding: '20px',
+                  borderBottom: '1px solid #f3f4f6',
+                  ':last-child': { borderBottom: 'none' }
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{ margin: '0 0 8px 0', fontSize: '18px' }}>
+                        {exp.address.slice(0, 6)}...{exp.address.slice(-4)}
+                      </h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+                        <div>
+                          <span style={{ color: '#6b7280', fontSize: '14px' }}>Price:</span>
+                          <span style={{ marginLeft: '8px', fontWeight: '500' }}>
+                            {formatEther(exp.priceEthWei)} ETH
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ color: '#6b7280', fontSize: '14px' }}>CID:</span>
+                          <span style={{ marginLeft: '8px', fontFamily: 'monospace', fontSize: '12px' }}>
+                            {exp.cid.slice(0, 20)}...
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ color: '#6b7280', fontSize: '14px' }}>Proposer:</span>
+                          <span style={{ marginLeft: '8px', fontFamily: 'monospace', fontSize: '12px' }}>
+                            {exp.currentProposer === ZERO_ADDRESS ? 'None' : exp.currentProposer.slice(0, 6) + '...'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={() => {
+                          setEditingExperience(exp.address);
+                          setEditPrice(formatEther(exp.priceEthWei));
+                          setEditCid(exp.cid);
+                          setEditProposer(exp.currentProposer === ZERO_ADDRESS ? '' : exp.currentProposer);
+                        }}
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: '#3b82f6',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <a
+                        href={`/experience/${exp.address}/buy`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: '#059669',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          textDecoration: 'none',
+                          display: 'inline-block'
+                        }}
+                      >
+                        View
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Edit Form */}
+                  {editingExperience === exp.address && (
+                    <div style={{
+                      marginTop: '16px',
+                      padding: '16px',
+                      backgroundColor: '#f8fafc',
+                      borderRadius: '8px',
+                      border: '1px solid #e5e7eb'
+                    }}>
+                      <h4 style={{ margin: '0 0 12px 0' }}>Edit Experience</h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
+                            Price (ETH)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.001"
+                            value={editPrice}
+                            onChange={(e) => setEditPrice(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '8px',
+                              border: '1px solid #d1d5db',
+                              borderRadius: '6px',
+                              fontSize: '14px'
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
+                            CID
+                          </label>
+                          <input
+                            type="text"
+                            value={editCid}
+                            onChange={(e) => setEditCid(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '8px',
+                              border: '1px solid #d1d5db',
+                              borderRadius: '6px',
+                              fontSize: '14px'
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
+                            Proposer Address
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="0x... (leave empty for none)"
+                            value={editProposer}
+                            onChange={(e) => setEditProposer(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '8px',
+                              border: '1px solid #d1d5db',
+                              borderRadius: '6px',
+                              fontSize: '14px'
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => updatePrice(exp.address)}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: '#059669',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '14px'
+                          }}
+                        >
+                          Update Price
+                        </button>
+                        <button
+                          onClick={() => updateCid(exp.address)}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: '#3b82f6',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '14px'
+                          }}
+                        >
+                          Update CID
+                        </button>
+                        <button
+                          onClick={() => updateProposer(exp.address)}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: '#7c3aed',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '14px'
+                          }}
+                        >
+                          Update Proposer
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingExperience('');
+                            setEditPrice('');
+                            setEditCid('');
+                            setEditProposer('');
+                          }}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: '#6b7280',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '14px'
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+                <p style={{ margin: '0', fontSize: '18px' }}>No created experiences yet</p>
+                <p style={{ margin: '8px 0 0 0', fontSize: '14px' }}>
+                  Create your first experience or add an existing one
+                </p>
               </div>
-
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                  Content ID (CID)
-                </label>
-                <input
-                  type="text"
-                  value={editCid}
-                  onChange={(e) => setEditCid(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '6px'
-                  }}
-                />
+            )
+          ) : (
+            purchasedExperiences.length > 0 ? (
+              purchasedExperiences.map((exp) => (
+                <div key={exp.address} style={{
+                  padding: '20px',
+                  borderBottom: '1px solid #f3f4f6',
+                  ':last-child': { borderBottom: 'none' }
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{ margin: '0 0 8px 0', fontSize: '18px' }}>
+                        {exp.address.slice(0, 6)}...{exp.address.slice(-4)}
+                      </h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+                        <div>
+                          <span style={{ color: '#6b7280', fontSize: '14px' }}>Passes:</span>
+                          <span style={{ marginLeft: '8px', fontWeight: '500' }}>
+                            {exp.passBalance.toString()}
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ color: '#6b7280', fontSize: '14px' }}>Creator:</span>
+                          <span style={{ marginLeft: '8px', fontFamily: 'monospace', fontSize: '12px' }}>
+                            {exp.owner.slice(0, 6)}...{exp.owner.slice(-4)}
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ color: '#6b7280', fontSize: '14px' }}>CID:</span>
+                          <span style={{ marginLeft: '8px', fontFamily: 'monospace', fontSize: '12px' }}>
+                            {exp.cid.slice(0, 20)}...
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <a
+                        href={`/experience/${exp.address}/buy`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: '#059669',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          textDecoration: 'none',
+                          display: 'inline-block'
+                        }}
+                      >
+                        View Experience
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+                <p style={{ margin: '0', fontSize: '18px' }}>No purchased experiences yet</p>
+                <p style={{ margin: '8px 0 0 0', fontSize: '14px' }}>
+                  Buy access passes to unlock experiences
+                </p>
               </div>
-
-              <div style={{ marginBottom: '24px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                  Proposer Address (optional)
-                </label>
-                <input
-                  type="text"
-                  value={editProposer}
-                  onChange={(e) => setEditProposer(e.target.value)}
-                  placeholder="0x0000000000000000000000000000000000000000"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '6px'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button
-                  onClick={() => updatePrice(editingExperience, editPrice)}
-                  disabled={loading !== ''}
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    backgroundColor: '#10b981',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: '500',
-                    cursor: loading !== '' ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  Update Price
-                </button>
-                
-                <button
-                  onClick={() => updateCid(editingExperience, editCid)}
-                  disabled={loading !== ''}
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    backgroundColor: '#3b82f6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: '500',
-                    cursor: loading !== '' ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  Update Content
-                </button>
-                
-                <button
-                  onClick={() => updateProposer(editingExperience, editProposer)}
-                  disabled={loading !== ''}
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    backgroundColor: '#f59e0b',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: '500',
-                    cursor: loading !== '' ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  Update Proposer
-                </button>
-                
-                <button
-                  onClick={() => {
-                    setEditingExperience('');
-                    setEditPrice('');
-                    setEditCid('');
-                    setEditProposer('');
-                  }}
-                  style={{
-                    padding: '12px 16px',
-                    backgroundColor: '#6b7280',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: '500',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Status Messages */}
-        {error && (
-          <div style={{
-            position: 'fixed',
-            top: '20px',
-            right: '20px',
-            padding: '16px',
-            backgroundColor: '#fef2f2',
-            border: '1px solid #fecaca',
-            color: '#dc2626',
-            borderRadius: '8px',
-            fontWeight: '500',
-            zIndex: 1001,
-            maxWidth: '400px'
-          }}>
-            ❌ {error}
-            <button
-              onClick={() => setError('')}
-              style={{
-                marginLeft: '12px',
-                background: 'none',
-                border: 'none',
-                color: '#dc2626',
-                cursor: 'pointer',
-                fontSize: '16px'
-              }}
-            >
-              ×
-            </button>
-          </div>
-        )}
-
-        {loading && (
-          <div style={{
-            position: 'fixed',
-            top: '20px',
-            right: '20px',
-            padding: '16px',
-            backgroundColor: '#eff6ff',
-            border: '1px solid #bfdbfe',
-            color: '#1e40af',
-            borderRadius: '8px',
-            fontWeight: '500',
-            zIndex: 1001
-          }}>
-            ⏳ {loading}
-          </div>
-        )}
+            )
+          )}
+        </div>
       </div>
     </div>
   );

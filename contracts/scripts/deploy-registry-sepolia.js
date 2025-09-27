@@ -1,5 +1,6 @@
 import pkg from "hardhat";
 const { ethers } = pkg;
+import "dotenv/config";
 
 async function main() {
   console.log("🚀 Deploying ExperienceRegistry to Sepolia...");
