@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { formatEther, parseEther } from 'viem';
 import ExperienceAbi from '../../abi/Experience.json';
-import { lighthouseService, isLighthouseAvailable, promptForApiKey, ExperienceIndex, PurchaseIndex } from '../../lib/lighthouse';
+import { lighthouseService, isLighthouseAvailable, ExperienceIndex, PurchaseIndex } from '../../lib/lighthouse';
 import { experienceRegistryService, ExperienceInfo } from '../../lib/experienceRegistry';
 import { mockExperienceRegistryService } from '../../lib/mockExperienceRegistry';
 import { useWallet } from '../../contexts/WalletContext';
@@ -53,11 +53,10 @@ export default function CreatorDashboard() {
   const [showAddExperience, setShowAddExperience] = useState<boolean>(false);
   const [manualAddress, setManualAddress] = useState<string>('');
   
-  // Lighthouse integration
+  // Lighthouse integration (platform key - always enabled)
   const [lighthouseHash, setLighthouseHash] = useState<string>('');
   const [purchaseHash, setPurchaseHash] = useState<string>('');
-  const [showLighthouseSetup, setShowLighthouseSetup] = useState<boolean>(false);
-  const [lighthouseEnabled, setLighthouseEnabled] = useState<boolean>(false);
+  const [lighthouseEnabled] = useState<boolean>(true); // Always enabled with platform key
 
   // Enhanced loading states for better UX
   const [lighthouseLoading, setLighthouseLoading] = useState<boolean>(false);
@@ -492,36 +491,7 @@ export default function CreatorDashboard() {
     }
   }
 
-  // Check Lighthouse setup
-  async function checkLighthouseSetup() {
-    if (!account) return;
-    
-    try {
-      const hash = lighthouseService.loadHashFromLocalStorage(account);
-      if (hash) {
-        setLighthouseHash(hash);
-        setLighthouseEnabled(true);
-      }
-    } catch (err) {
-      console.warn('Lighthouse setup check failed:', err);
-    }
-  }
-
-  async function setupLighthouse() {
-    if (!account) return;
-    
-    try {
-      const apiKey = await promptForApiKey();
-      if (apiKey) {
-        setLighthouseEnabled(true);
-        setShowLighthouseSetup(false);
-        // Trigger initial sync
-        await loadExperiences();
-      }
-    } catch (err) {
-      console.error('Lighthouse setup failed:', err);
-    }
-  }
+  // Lighthouse is always enabled with platform key - no setup needed
 
   // Manual experience addition
   async function addManualExperience() {
@@ -642,7 +612,7 @@ export default function CreatorDashboard() {
   // Effects
   useEffect(() => {
     if (isConnected && !isWrongNetwork && account) {
-      checkLighthouseSetup();
+      // Lighthouse is always enabled with platform key
       loadExperiences();
     }
   }, [isConnected, isWrongNetwork, account]);
@@ -768,66 +738,6 @@ export default function CreatorDashboard() {
               }}
             >
               Enable Sync
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Lighthouse Setup Modal */}
-      {showLighthouseSetup && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: '30px',
-            borderRadius: '12px',
-            maxWidth: '500px',
-            width: '90%'
-          }}>
-            <h2 style={{ margin: '0 0 16px 0' }}>🚀 Setup Lighthouse Sync</h2>
-            <p style={{ margin: '0 0 20px 0', color: '#6b7280' }}>
-              Enter your Lighthouse API key to enable cross-device sync and instant loading.
-            </p>
-            <button
-              onClick={setupLighthouse}
-              style={{
-                width: '100%',
-                padding: '12px',
-                backgroundColor: '#059669',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '16px',
-                marginBottom: '12px'
-              }}
-            >
-              Enter API Key
-            </button>
-            <button
-              onClick={() => setShowLighthouseSetup(false)}
-              style={{
-                width: '100%',
-                padding: '12px',
-                backgroundColor: '#6b7280',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '16px'
-              }}
-            >
-              Cancel
             </button>
           </div>
         </div>

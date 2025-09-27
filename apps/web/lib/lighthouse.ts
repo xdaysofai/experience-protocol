@@ -45,8 +45,9 @@ class LighthouseService {
   private apiKey: string | null = null;
   
   constructor() {
-    // Set the platform API key
+    // Set the platform API key - users don't need to provide their own
     this.apiKey = process.env.NEXT_PUBLIC_LIGHTHOUSE_API_KEY || 'bc7f3123.5e11a21851e74fd3a1f8bbc6faa5eed0';
+    console.log('🌊 Lighthouse service initialized with platform API key');
   }
 
   setApiKey(apiKey: string) {
@@ -266,21 +267,15 @@ export const lighthouseService = new LighthouseService();
 
 // Helper function to check if Lighthouse is available
 export function isLighthouseAvailable(): boolean {
-  return Boolean(lighthouseService.getApiKey());
+  // Lighthouse is always available with platform API key
+  return true;
 }
 
-// Helper to prompt user for API key
-export function promptForApiKey(): string | null {
-  const apiKey = prompt(
-    'Enter your Lighthouse API Key to enable experience syncing across devices.\n\n' +
-    'Get your free API key at: https://www.lighthouse.storage/\n\n' +
-    'You can also set NEXT_PUBLIC_LIGHTHOUSE_API_KEY in your environment.'
-  );
-  
-  if (apiKey) {
-    lighthouseService.setApiKey(apiKey.trim());
-    return apiKey.trim();
-  }
-  
-  return null;
+// Helper to get platform API key info (no user input needed)
+export function getLighthouseInfo(): { available: boolean; isPlatformKey: boolean } {
+  const apiKey = lighthouseService.getApiKey();
+  return {
+    available: Boolean(apiKey),
+    isPlatformKey: apiKey === 'bc7f3123.5e11a21851e74fd3a1f8bbc6faa5eed0'
+  };
 }
