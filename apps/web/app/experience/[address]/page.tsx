@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { formatEther } from 'viem';
-import ExperienceAbi from '../../../abi/Experience.json';
-import { useWallet } from '../../../contexts/WalletContext';
-import WalletButton from '../../../components/WalletButton';
-import { publicClient } from '../../../lib/viemClient';
-import { fetchExperienceMetadata, ExperienceMetadata } from '../../../lib/experienceMetadata';
-import { resolveAddressIdentity, formatAddress, AddressIdentity } from '../../../lib/identity';
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { formatEther } from "viem";
+import ExperienceAbi from "@/abi/Experience.json";
+import WalletButton from "@/components/WalletButton";
+import { useWallet } from "@/contexts/WalletContext";
+import { fetchExperienceMetadata, ExperienceMetadata } from "@/lib/experienceMetadata";
+import { resolveAddressIdentity, formatAddress, AddressIdentity } from "@/lib/identity";
+import { publicClient } from "@/lib/viemClient";
 
 const PASS_ID = 1n;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 interface ExperienceItem {
   name?: string;
@@ -21,29 +22,26 @@ interface ExperienceItem {
   tags?: string[];
 }
 
-export default function ExperienceContentPage({ params }: { params: { address: string } }) {
+export default function ExperiencePage({ params }: { params: { address: string } }) {
   const experience = params.address as `0x${string}`;
   const { account, isConnected, isWrongNetwork } = useWallet();
 
-  const [loading, setLoading] = useState<string>('Loading experience...');
-  const [error, setError] = useState<string>('');
-
-  const [owner, setOwner] = useState<string>('');
+  const [loadingMessage, setLoadingMessage] = useState<string>("Loading experience...");
+  const [error, setError] = useState<string>("");
+  const [owner, setOwner] = useState<string>("");
   const [priceEthWei, setPriceEthWei] = useState<bigint>(0n);
-  const [cid, setCid] = useState<string>('');
+  const [cid, setCid] = useState<string>("");
   const [passBalance, setPassBalance] = useState<bigint>(0n);
-
   const [metadata, setMetadata] = useState<ExperienceMetadata | null>(null);
   const [metadataLoading, setMetadataLoading] = useState<boolean>(false);
-  const [currentProposer, setCurrentProposer] = useState<string>('');
+  const [currentProposer, setCurrentProposer] = useState<string>("");
   const [platformFeeBps, setPlatformFeeBps] = useState<number>(500);
   const [proposerFeeBps, setProposerFeeBps] = useState<number>(1000);
   const [ownerIdentity, setOwnerIdentity] = useState<AddressIdentity | null>(null);
   const [proposerIdentity, setProposerIdentity] = useState<AddressIdentity | null>(null);
 
-  const experienceName = metadata?.name || 'Experience Pass';
-  const experienceSummary = metadata?.description || '';
-  const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+  const experienceName = metadata?.name || "Experience Pass";
+  const experienceSummary = metadata?.description || "";
   const hasProposer = Boolean(currentProposer && currentProposer !== ZERO_ADDRESS);
   const creatorShareBps = Math.max(0, 10_000 - platformFeeBps - proposerFeeBps);
 
@@ -72,13 +70,9 @@ export default function ExperienceContentPage({ params }: { params: { address: s
       setMetadataLoading(true);
       try {
         const result = await fetchExperienceMetadata(cid, controller.signal);
-        if (!cancelled) {
-          setMetadata(result);
-        }
+        if (!cancelled) setMetadata(result);
       } finally {
-        if (!cancelled) {
-          setMetadataLoading(false);
-        }
+        if (!cancelled) setMetadataLoading(false);
       }
     }
 
@@ -93,7 +87,7 @@ export default function ExperienceContentPage({ params }: { params: { address: s
   useEffect(() => {
     let cancelled = false;
 
-    async function loadOwnerIdentity() {
+    async function syncOwnerIdentity() {
       if (!owner) {
         setOwnerIdentity(null);
         return;
@@ -102,7 +96,7 @@ export default function ExperienceContentPage({ params }: { params: { address: s
       if (!cancelled) setOwnerIdentity(identity);
     }
 
-    loadOwnerIdentity();
+    syncOwnerIdentity();
 
     return () => {
       cancelled = true;
@@ -112,8 +106,8 @@ export default function ExperienceContentPage({ params }: { params: { address: s
   useEffect(() => {
     let cancelled = false;
 
-    async function loadProposerIdentity() {
-      if (!hasProposer || !currentProposer) {
+    async function syncProposerIdentity() {
+      if (!hasProposer) {
         setProposerIdentity(null);
         return;
       }
@@ -121,7 +115,7 @@ export default function ExperienceContentPage({ params }: { params: { address: s
       if (!cancelled) setProposerIdentity(identity);
     }
 
-    loadProposerIdentity();
+    syncProposerIdentity();
 
     return () => {
       cancelled = true;
@@ -130,53 +124,54 @@ export default function ExperienceContentPage({ params }: { params: { address: s
 
   async function loadContractData() {
     try {
-      setLoading('Loading experience...');
-      setError('');
+      setLoadingMessage("Loading experience...");
+      setError("");
 
-      const [ownerData, price, cidData, proposer, platformBps, proposerBps] = await Promise.all([
-        publicClient.readContract({
-          address: experience,
-          abi: ExperienceAbi.abi,
-          functionName: 'owner',
-        }),
-        publicClient.readContract({
-          address: experience,
-          abi: ExperienceAbi.abi,
-          functionName: 'priceEthWei',
-        }),
-        publicClient.readContract({
-          address: experience,
-          abi: ExperienceAbi.abi,
-          functionName: 'cid',
-        }),
-        publicClient.readContract({
-          address: experience,
-          abi: ExperienceAbi.abi,
-          functionName: 'currentProposer',
-        }),
-        publicClient.readContract({
-          address: experience,
-          abi: ExperienceAbi.abi,
-          functionName: 'PLATFORM_FEE_BPS',
-        }),
-        publicClient.readContract({
-          address: experience,
-          abi: ExperienceAbi.abi,
-          functionName: 'proposerFeeBps',
-        }),
-      ]);
+      const [ownerData, priceValue, cidValue, proposer, platformBps, proposerBps] =
+        await Promise.all([
+          publicClient.readContract({
+            address: experience,
+            abi: ExperienceAbi.abi,
+            functionName: "owner",
+          }),
+          publicClient.readContract({
+            address: experience,
+            abi: ExperienceAbi.abi,
+            functionName: "priceEthWei",
+          }),
+          publicClient.readContract({
+            address: experience,
+            abi: ExperienceAbi.abi,
+            functionName: "cid",
+          }),
+          publicClient.readContract({
+            address: experience,
+            abi: ExperienceAbi.abi,
+            functionName: "currentProposer",
+          }),
+          publicClient.readContract({
+            address: experience,
+            abi: ExperienceAbi.abi,
+            functionName: "PLATFORM_FEE_BPS",
+          }),
+          publicClient.readContract({
+            address: experience,
+            abi: ExperienceAbi.abi,
+            functionName: "proposerFeeBps",
+          }),
+        ]);
 
       setOwner(ownerData as string);
-      setPriceEthWei(price as bigint);
-      setCid(cidData as string);
+      setPriceEthWei(priceValue as bigint);
+      setCid(cidValue as string);
       setCurrentProposer(proposer as string);
       setPlatformFeeBps(Number(platformBps));
       setProposerFeeBps(Number(proposerBps));
     } catch (err: any) {
-      console.error('Failed to load experience:', err);
-      setError(err?.message || 'Failed to load experience');
+      console.error("Failed to load experience", err);
+      setError(err?.message || "Failed to load experience");
     } finally {
-      setLoading('');
+      setLoadingMessage("");
     }
   }
 
@@ -187,13 +182,12 @@ export default function ExperienceContentPage({ params }: { params: { address: s
       const balance = await publicClient.readContract({
         address: experience,
         abi: ExperienceAbi.abi,
-        functionName: 'balanceOf',
+        functionName: "balanceOf",
         args: [account as `0x${string}`, PASS_ID],
       });
-
       setPassBalance(balance as bigint);
     } catch (err) {
-      console.warn('Failed to load pass balance:', err);
+      console.warn("Failed to read balance", err);
       setPassBalance(0n);
     }
   }
@@ -205,329 +199,198 @@ export default function ExperienceContentPage({ params }: { params: { address: s
 
   const additionalNotes: string | undefined = useMemo(() => {
     const notes = metadata?.raw?.additionalNotes;
-    return typeof notes === 'string' ? notes : undefined;
+    return typeof notes === "string" ? notes : undefined;
   }, [metadata]);
 
+  const overviewCards = [
+    { label: "Passes owned", value: passBalance.toString() },
+    {
+      label: "Creator",
+      value: formatAddress(owner, ownerIdentity),
+      helper: ownerIdentity?.verified ? "Self-verified" : undefined,
+    },
+    { label: "Current price", value: `${formatEther(priceEthWei)} ETH` },
+    ...(hasProposer
+      ? [
+          {
+            label: "Current proposer",
+            value: formatAddress(currentProposer, proposerIdentity),
+            helper: `Earning ${(proposerFeeBps / 100).toFixed(2)}% per sale`,
+          },
+        ]
+      : []),
+    ...(cid
+      ? [
+          {
+            label: "Content ID",
+            value: cid,
+            monospace: true,
+          },
+        ]
+      : []),
+    {
+      label: "Revenue split",
+      value: `Creator ${(creatorShareBps / 100).toFixed(2)}%`,
+      helper: `Platform ${(platformFeeBps / 100).toFixed(2)}% · Proposer ${(proposerFeeBps / 100).toFixed(2)}%`,
+    },
+  ];
+
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-      padding: '24px'
-    }}>
-      <div style={{
-        maxWidth: '1100px',
-        margin: '0 auto',
-        color: 'white'
-      }}>
-        <header style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '32px'
-        }}>
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 px-4 py-10 text-white">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+        <header className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg backdrop-blur md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 style={{ margin: 0, fontSize: '36px', fontWeight: 700 }}>
-              {experienceName}
-            </h1>
-            <p style={{ margin: '8px 0 0 0', color: 'rgba(255,255,255,0.7)' }}>
-              {experienceSummary || 'Token-gated experience content'}
+            <p className="text-xs uppercase tracking-[0.2em] text-primary-200">Experience</p>
+            <h1 className="mt-2 text-3xl font-semibold md:text-4xl">{experienceName}</h1>
+            <p className="mt-2 text-sm text-slate-300">
+              {experienceSummary || "Token-gated content curated by the creator."}
             </p>
           </div>
           <WalletButton size="md" />
         </header>
 
-        {loading && (
-          <div style={{
-            marginBottom: '20px',
-            padding: '16px',
-            borderRadius: '8px',
-            backgroundColor: 'rgba(15, 118, 110, 0.2)',
-            border: '1px solid rgba(45, 212, 191, 0.4)'
-          }}>
-            {loading}
+        {loadingMessage && (
+          <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
+            {loadingMessage}
           </div>
         )}
 
         {error && (
-          <div style={{
-            marginBottom: '20px',
-            padding: '16px',
-            borderRadius: '8px',
-            backgroundColor: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid rgba(248, 113, 113, 0.4)'
-          }}>
-            <p style={{ margin: 0 }}>⚠️ {error}</p>
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+            ⚠️ {error}
           </div>
         )}
 
         {!isConnected ? (
-          <div style={{
-            textAlign: 'center',
-            backgroundColor: 'rgba(15, 23, 42, 0.7)',
-            borderRadius: '12px',
-            padding: '48px 24px'
-          }}>
-            <h2 style={{ margin: '0 0 16px 0' }}>Connect your wallet to continue</h2>
-            <p style={{ margin: '0 0 24px 0', color: 'rgba(255,255,255,0.7)' }}>
-              You need to hold the access pass to view this experience.
+          <div className="rounded-3xl border border-dashed border-white/15 bg-white/5 p-12 text-center">
+            <h2 className="text-2xl font-semibold">Connect your wallet to continue</h2>
+            <p className="mt-3 text-sm text-slate-300">
+              Passholders unlock the full experience instantly.
             </p>
-            <WalletButton size="lg" />
+            <div className="mt-6 flex justify-center">
+              <WalletButton size="lg" />
+            </div>
           </div>
         ) : isWrongNetwork ? (
-          <div style={{
-            textAlign: 'center',
-            backgroundColor: 'rgba(69, 10, 10, 0.7)',
-            borderRadius: '12px',
-            padding: '48px 24px'
-          }}>
-            <h2 style={{ margin: '0 0 16px 0' }}>Switch to Sepolia</h2>
-            <p style={{ margin: 0, color: 'rgba(255,255,255,0.7)' }}>
-              This experience lives on the Sepolia testnet. Switch networks and refresh the page.
-            </p>
+          <div className="rounded-3xl border border-yellow-500/30 bg-yellow-500/10 p-8 text-center text-yellow-100">
+            <h2 className="text-xl font-semibold">Switch to the Sepolia network</h2>
+            <p className="mt-2 text-sm">This experience is deployed on Sepolia.</p>
           </div>
         ) : passBalance === 0n ? (
-          <div style={{
-            backgroundColor: 'rgba(15, 23, 42, 0.7)',
-            borderRadius: '12px',
-            padding: '48px 24px',
-            textAlign: 'center'
-          }}>
-            <h2 style={{ margin: '0 0 16px 0' }}>Access locked</h2>
-            <p style={{ margin: '0 0 24px 0', color: 'rgba(255,255,255,0.7)' }}>
-              You do not own a pass for this experience yet.
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-10 text-center">
+            <h2 className="text-2xl font-semibold">Access locked</h2>
+            <p className="mt-3 text-sm text-slate-300">
+              Purchase a pass to unlock premium content.
             </p>
             <Link
               href={`/experience/${experience}/buy`}
-              style={{
-                display: 'inline-block',
-                padding: '14px 28px',
-                backgroundColor: '#2563eb',
-                color: 'white',
-                borderRadius: '8px',
-                fontWeight: 600
-              }}
+              className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-primary-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-primary-500"
             >
-              🎫 Buy Access Pass
+              🎫 Buy access pass
             </Link>
           </div>
         ) : (
-          <div style={{
-            display: 'grid',
-            gap: '20px'
-          }}>
-            <section style={{
-              backgroundColor: 'rgba(15, 23, 42, 0.7)',
-              borderRadius: '12px',
-              padding: '32px'
-            }}>
-              <h2 style={{ margin: '0 0 16px 0', fontSize: '24px' }}>Experience Overview</h2>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                gap: '16px'
-              }}>
-                <div style={{
-                  padding: '16px',
-                  borderRadius: '8px',
-                  backgroundColor: 'rgba(30, 41, 59, 0.8)'
-                }}>
-                  <p style={{ margin: '0 0 4px 0', color: 'rgba(255,255,255,0.6)' }}>Passes owned</p>
-                  <p style={{ margin: 0, fontSize: '24px', fontWeight: 600 }}>{passBalance.toString()}</p>
-                </div>
-                <div style={{
-                  padding: '16px',
-                  borderRadius: '8px',
-                  backgroundColor: 'rgba(30, 41, 59, 0.8)'
-                }}>
-                  <p style={{ margin: '0 0 4px 0', color: 'rgba(255,255,255,0.6)' }}>Creator</p>
-                  <p style={{
-                    margin: 0,
-                    wordBreak: 'break-all'
-                  }} title={owner}>
-                    {formatAddress(owner, ownerIdentity)}
-                  </p>
-                  {ownerIdentity?.verified && <span style={{ color: '#2dd4bf', fontSize: '12px' }}>✅ Self-verified</span>}
-                </div>
-                <div style={{
-                  padding: '16px',
-                  borderRadius: '8px',
-                  backgroundColor: 'rgba(30, 41, 59, 0.8)'
-                }}>
-                  <p style={{ margin: '0 0 4px 0', color: 'rgba(255,255,255,0.6)' }}>Current price</p>
-                  <p style={{ margin: 0, fontSize: '24px', fontWeight: 600 }}>
-                    {formatEther(priceEthWei)} ETH
-                  </p>
-                </div>
-                {hasProposer && (
-                  <div style={{
-                    padding: '16px',
-                    borderRadius: '8px',
-                    backgroundColor: 'rgba(30, 41, 59, 0.8)'
-                  }}>
-                    <p style={{ margin: '0 0 4px 0', color: 'rgba(255,255,255,0.6)' }}>Current proposer</p>
-                    <p style={{
-                      margin: 0,
-                      wordBreak: 'break-all'
-                    }} title={currentProposer}>
-                      {formatAddress(currentProposer, proposerIdentity)}
+          <div className="space-y-6">
+            <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg">
+              <h2 className="text-xl font-semibold">Experience overview</h2>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {overviewCards.map(({ label, value, helper, monospace }) => (
+                  <div
+                    key={label}
+                    className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-slate-200"
+                  >
+                    <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
+                    <p
+                      className={`mt-2 text-base font-semibold text-white ${monospace ? "font-mono text-xs" : ""}`}
+                      title={value}
+                    >
+                      {value}
                     </p>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'rgba(148, 163, 184, 0.9)' }}>
-                      Earns {(proposerFeeBps / 100).toFixed(2)}% of every sale
-                    </p>
+                    {helper && <p className="mt-1 text-xs text-slate-400">{helper}</p>}
                   </div>
-                )}
-                {cid && (
-                  <div style={{
-                    padding: '16px',
-                    borderRadius: '8px',
-                    backgroundColor: 'rgba(30, 41, 59, 0.8)'
-                  }}>
-                    <p style={{ margin: '0 0 4px 0', color: 'rgba(255,255,255,0.6)' }}>Content ID</p>
-                    <p style={{
-                      margin: 0,
-                      fontSize: '12px',
-                      wordBreak: 'break-all'
-                    }}>
-                      {cid}
-                    </p>
-                  </div>
-                )}
-                <div style={{
-                  padding: '16px',
-                  borderRadius: '8px',
-                  backgroundColor: 'rgba(30, 41, 59, 0.8)'
-                }}>
-                  <p style={{ margin: '0 0 4px 0', color: 'rgba(255,255,255,0.6)' }}>Revenue split</p>
-                  <ul style={{
-                    margin: 0,
-                    paddingLeft: '18px',
-                    color: 'rgba(255,255,255,0.75)',
-                    fontSize: '13px'
-                  }}>
-                    <li>Creator: {(creatorShareBps / 100).toFixed(2)}%</li>
-                    <li>Platform: {(platformFeeBps / 100).toFixed(2)}%</li>
-                    <li>Proposer: {(proposerFeeBps / 100).toFixed(2)}%</li>
-                  </ul>
-                </div>
+                ))}
               </div>
             </section>
 
-            <section style={{
-              backgroundColor: 'rgba(15, 23, 42, 0.7)',
-              borderRadius: '12px',
-              padding: '32px'
-            }}>
-              <h2 style={{ margin: '0 0 16px 0', fontSize: '24px' }}>Unlocked Content</h2>
+            <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <h2 className="text-xl font-semibold">Unlocked content</h2>
+                <p className="text-xs text-slate-400">
+                  Only passholders can view this content. Keep the CID private.
+                </p>
+              </div>
+
               {metadataLoading ? (
-                <p style={{ color: 'rgba(255,255,255,0.7)' }}>Loading content...</p>
+                <p className="mt-4 text-sm text-slate-300">Loading content...</p>
               ) : experienceItems.length > 0 ? (
-                <div style={{ display: 'grid', gap: '16px' }}>
+                <div className="mt-5 grid gap-4">
                   {experienceItems.map((item, index) => (
                     <div
-                      key={`${item.name || 'item'}-${index}`}
-                      style={{
-                        padding: '20px',
-                        borderRadius: '10px',
-                        backgroundColor: 'rgba(30, 41, 59, 0.8)',
-                        border: '1px solid rgba(148, 163, 184, 0.2)'
-                      }}
+                      key={`${item.name || "item"}-${index}`}
+                      className="rounded-2xl border border-white/10 bg-black/30 p-5"
                     >
-                      <h3 style={{ margin: '0 0 8px 0', fontSize: '20px' }}>
-                        {item.name || `Item ${index + 1}`}
-                      </h3>
-                      {item.description && (
-                        <p style={{ margin: '0 0 8px 0', color: 'rgba(255,255,255,0.7)' }}>
-                          {item.description}
-                        </p>
-                      )}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', color: 'rgba(255,255,255,0.6)' }}>
-                        {item.category && (
-                          <span style={{
-                            padding: '4px 10px',
-                            borderRadius: '999px',
-                            backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                            border: '1px solid rgba(59, 130, 246, 0.4)'
-                          }}>
-                            {item.category}
-                          </span>
+                      <div className="flex flex-col gap-2">
+                        <h3 className="text-lg font-semibold text-white">
+                          {item.name || `Item ${index + 1}`}
+                        </h3>
+                        {item.description && (
+                          <p className="text-sm text-slate-300">{item.description}</p>
                         )}
-                        {item.duration && (
-                          <span style={{
-                            padding: '4px 10px',
-                            borderRadius: '999px',
-                            backgroundColor: 'rgba(16, 185, 129, 0.2)',
-                            border: '1px solid rgba(16, 185, 129, 0.4)'
-                          }}>
-                            ⏱ {item.duration}
-                          </span>
-                        )}
-                        {item.priceRange && (
-                          <span style={{
-                            padding: '4px 10px',
-                            borderRadius: '999px',
-                            backgroundColor: 'rgba(236, 72, 153, 0.2)',
-                            border: '1px solid rgba(236, 72, 153, 0.4)'
-                          }}>
-                            💵 {item.priceRange}
-                          </span>
-                        )}
-                        {item.tags?.slice(0, 3).map(tag => (
-                          <span
-                            key={tag}
-                            style={{
-                              padding: '4px 10px',
-                              borderRadius: '999px',
-                              backgroundColor: 'rgba(168, 85, 247, 0.2)',
-                              border: '1px solid rgba(168, 85, 247, 0.4)'
-                            }}
-                          >
-                            #{tag}
-                          </span>
-                        ))}
+                        <div className="flex flex-wrap gap-2 text-xs text-slate-200">
+                          {item.category && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-blue-400/40 bg-blue-500/10 px-3 py-1">
+                              {item.category}
+                            </span>
+                          )}
+                          {item.duration && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1">
+                              ⏱ {item.duration}
+                            </span>
+                          )}
+                          {item.priceRange && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-pink-400/40 bg-pink-500/10 px-3 py-1">
+                              💵 {item.priceRange}
+                            </span>
+                          )}
+                          {item.tags?.slice(0, 3).map((tag) => (
+                            <span
+                              key={tag}
+                              className="inline-flex items-center gap-1 rounded-full border border-purple-400/40 bg-purple-500/10 px-3 py-1"
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p style={{ color: 'rgba(255,255,255,0.7)' }}>
-                  {experienceSummary || 'The creator has not published detailed content yet.'}
+                <p className="mt-4 text-sm text-slate-300">
+                  {experienceSummary || "The creator has not published detailed content yet."}
                 </p>
               )}
 
               {additionalNotes && (
-                <div style={{
-                  marginTop: '24px',
-                  padding: '20px',
-                  borderRadius: '10px',
-                  backgroundColor: 'rgba(30, 41, 59, 0.8)'
-                }}>
-                  <h3 style={{ margin: '0 0 12px 0', fontSize: '20px' }}>Additional Notes</h3>
-                  <p style={{ margin: 0, color: 'rgba(255,255,255,0.7)' }}>{additionalNotes}</p>
+                <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-5 text-sm text-slate-200">
+                  <h3 className="text-base font-semibold text-white">Additional notes</h3>
+                  <p className="mt-2 text-slate-300">{additionalNotes}</p>
                 </div>
               )}
             </section>
 
-            <section style={{
-              backgroundColor: 'rgba(15, 23, 42, 0.7)',
-              borderRadius: '12px',
-              padding: '32px'
-            }}>
-              <h2 style={{ margin: '0 0 16px 0', fontSize: '24px' }}>Need another pass?</h2>
-              <p style={{ margin: '0 0 24px 0', color: 'rgba(255,255,255,0.7)' }}>
-                You can purchase additional passes for teammates or collaborators if needed.
-              </p>
+            <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <h2 className="text-xl font-semibold">Need another pass?</h2>
+                <p className="text-xs text-slate-400">
+                  Purchase additional passes for teammates or collaborators.
+                </p>
+              </div>
               <Link
                 href={`/experience/${experience}/buy`}
-                style={{
-                  display: 'inline-block',
-                  padding: '14px 28px',
-                  backgroundColor: '#2563eb',
-                  color: 'white',
-                  borderRadius: '8px',
-                  fontWeight: 600
-                }}
+                className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-500"
               >
-                🔁 Buy More Passes
+                🔁 Buy more passes
               </Link>
             </section>
           </div>

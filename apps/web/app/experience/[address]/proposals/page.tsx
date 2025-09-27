@@ -1,11 +1,15 @@
 "use client";
-import { useState, useEffect } from 'react';
-import ExperienceAbi from '../../../../abi/Experience.json';
-import { getInjectedProvider } from '../../../../lib/provider';
-import { publicClient } from '../../../../lib/viemClient';
-import { resolveAddressIdentity, formatAddress, AddressIdentity } from '../../../../lib/identity';
 
-const RELAYER_URL = process.env.NEXT_PUBLIC_RELAYER_URL || 'http://localhost:4000';
+import { useEffect, useMemo, useState } from "react";
+import ExperienceAbi from "@/abi/Experience.json";
+import { getInjectedProvider } from "@/lib/provider";
+import { publicClient } from "@/lib/viemClient";
+import { resolveAddressIdentity, formatAddress, AddressIdentity } from "@/lib/identity";
+
+const RELAYER_URL = process.env.NEXT_PUBLIC_RELAYER_URL || "http://localhost:4000";
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+type ProposalStatus = "pending" | "accepted" | "rejected";
 
 interface Proposal {
   id: string;
@@ -16,27 +20,22 @@ interface Proposal {
   newCid: string;
   votesUp: number;
   votesDown: number;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: ProposalStatus;
   voters: string[];
 }
 
 export default function ProposalsPage({ params }: { params: { address: string } }) {
   const experience = params.address as `0x${string}`;
-  const [account, setAccount] = useState<string>('');
-  const [owner, setOwner] = useState<string>('');
+  const [account, setAccount] = useState<string>("");
+  const [owner, setOwner] = useState<string>("");
   const [proposals, setProposals] = useState<Proposal[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string>('');
   const [showCreateForm, setShowCreateForm] = useState<boolean>(false);
-  const [newProposal, setNewProposal] = useState({
-    title: '',
-    summary: '',
-    newCid: ''
-  });
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
+  const [newProposal, setNewProposal] = useState({ title: "", summary: "", newCid: "" });
   const [identityMap, setIdentityMap] = useState<Record<string, AddressIdentity>>({});
 
-  const isOwner = account && owner && account.toLowerCase() === owner.toLowerCase();
-  const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+  const isOwner = Boolean(account && owner && account.toLowerCase() === owner.toLowerCase());
   const identityFor = (address?: string) => (address ? identityMap[address.toLowerCase()] : undefined);
 
   useEffect(() => {
@@ -48,9 +47,7 @@ export default function ProposalsPage({ params }: { params: { address: string } 
   useEffect(() => {
     const addresses = new Set<string>();
     if (owner) addresses.add(owner);
-    proposals.forEach((proposal) => {
-      if (proposal.proposer) addresses.add(proposal.proposer);
-    });
+    proposals.forEach((proposal) => addresses.add(proposal.proposer));
 
     addresses.forEach((addr) => {
       if (!addr || addr === ZERO_ADDRESS) return;
@@ -64,26 +61,35 @@ export default function ProposalsPage({ params }: { params: { address: string } 
     });
   }, [owner, proposals, identityMap]);
 
+  const statusStyles = useMemo(
+    () => ({
+      pending: "border-yellow-500/30 bg-yellow-500/10 text-yellow-100",
+      accepted: "border-emerald-500/30 bg-emerald-500/10 text-emerald-100",
+      rejected: "border-red-500/30 bg-red-500/10 text-red-100",
+    }),
+    []
+  );
+
   async function loadOwner() {
     try {
-      const ownerData = await publicClient.readContract({
+      const result = await publicClient.readContract({
         address: experience,
         abi: ExperienceAbi.abi,
-        functionName: 'owner',
+        functionName: "owner",
       });
-      setOwner(ownerData as string);
+      setOwner(result as string);
     } catch (err) {
-      console.error('Failed to load owner:', err);
+      console.error("Failed to load owner", err);
     }
   }
 
   async function connectWallet() {
     try {
       const provider = await getInjectedProvider();
-      const [account] = await provider.request({ method: 'eth_requestAccounts' });
-      setAccount(account);
+      const [connected] = await provider.request({ method: "eth_requestAccounts" });
+      setAccount(connected);
     } catch (err) {
-      console.error('Failed to connect wallet:', err);
+      console.error("Failed to connect wallet", err);
     }
   }
 
@@ -93,42 +99,40 @@ export default function ProposalsPage({ params }: { params: { address: string } 
       const data = await response.json();
       setProposals(data.proposals || []);
     } catch (err) {
-      console.error('Failed to load proposals:', err);
-      setError('Failed to load proposals');
+      console.error("Failed to load proposals", err);
+      setError("Failed to load proposals");
     }
   }
 
   async function createProposal() {
     if (!account || !newProposal.title || !newProposal.summary || !newProposal.newCid) {
-      setError('Please fill all fields and connect wallet');
+      setError("Fill all fields and connect wallet");
       return;
     }
 
     setLoading(true);
-    setError('');
+    setError("");
 
     try {
       const response = await fetch(`${RELAYER_URL}/proposals`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           experience,
           proposer: account,
           title: newProposal.title,
           summary: newProposal.summary,
-          newCid: newProposal.newCid
-        })
+          newCid: newProposal.newCid,
+        }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to create proposal');
-      }
+      if (!response.ok) throw new Error("Failed to create proposal");
 
-      setNewProposal({ title: '', summary: '', newCid: '' });
+      setNewProposal({ title: "", summary: "", newCid: "" });
       setShowCreateForm(false);
       loadProposals();
     } catch (err: any) {
-      setError(err.message || 'Failed to create proposal');
+      setError(err.message || "Failed to create proposal");
     } finally {
       setLoading(false);
     }
@@ -136,25 +140,25 @@ export default function ProposalsPage({ params }: { params: { address: string } 
 
   async function vote(proposalId: string, up: boolean) {
     if (!account) {
-      setError('Connect wallet to vote');
+      setError("Connect wallet to vote");
       return;
     }
 
     try {
       const response = await fetch(`${RELAYER_URL}/proposals/${proposalId}/vote`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ up, voter: account })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ up, voter: account }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to vote');
+        const data = await response.json();
+        throw new Error(data.error || "Failed to vote");
       }
 
       loadProposals();
     } catch (err: any) {
-      setError(err.message || 'Failed to vote');
+      setError(err.message || "Failed to vote");
     }
   }
 
@@ -162,219 +166,210 @@ export default function ProposalsPage({ params }: { params: { address: string } 
     if (!isOwner) return;
 
     setLoading(true);
-    setError('');
+    setError("");
 
     try {
       const response = await fetch(`${RELAYER_URL}/proposals/${proposalId}/accept`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to accept proposal');
+        const data = await response.json();
+        throw new Error(data.error || "Failed to accept proposal");
       }
 
       loadProposals();
     } catch (err: any) {
-      setError(err.message || 'Failed to accept proposal');
+      setError(err.message || "Failed to accept proposal");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
-      <h1>Proposals for Experience</h1>
-      
-      <div style={{ marginBottom: '20px', padding: '15px', border: '1px solid #ddd', borderRadius: '8px' }}>
-        <p><strong>Experience:</strong> {experience}</p>
-        <p>
-          <strong>Owner:</strong>{' '}
-          {owner ? <span title={owner}>{formatAddress(owner, identityFor(owner))}</span> : '—'}
-        </p>
-        <p><strong>Connected:</strong> {account || 'Not connected'}</p>
-        <p><strong>Access:</strong> {isOwner ? '✅ Owner (can accept)' : '👁️ Viewer (can vote)'}</p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 px-4 py-10 text-white">
+      <div className="mx-auto w-full max-w-4xl space-y-6">
+        <header className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg backdrop-blur">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">{experience}</p>
+          <h1 className="mt-2 text-3xl font-semibold">Community proposals</h1>
+          <p className="mt-2 text-sm text-slate-300">
+            Contributors can propose new CIDs or content updates. Accepting a proposal updates the relayer state and rewards the proposer with a 10% share of sales.
+          </p>
+        </header>
 
-      {!account && (
-        <div style={{ textAlign: 'center', padding: '20px', marginBottom: '20px' }}>
-          <button onClick={connectWallet} style={{ padding: '10px 20px', fontSize: '16px' }}>
-            Connect Wallet
-          </button>
-        </div>
-      )}
-
-      <div style={{ marginBottom: '20px' }}>
-        <button 
-          onClick={() => setShowCreateForm(!showCreateForm)}
-          disabled={!account}
-          style={{ 
-            padding: '10px 20px', 
-            fontSize: '14px', 
-            backgroundColor: '#007bff',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: account ? 'pointer' : 'not-allowed'
-          }}
-        >
-          {showCreateForm ? 'Cancel' : 'Create Proposal'}
-        </button>
-      </div>
-
-      {showCreateForm && (
-        <div style={{ marginBottom: '30px', padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
-          <h3>Create New Proposal</h3>
-          <div style={{ marginBottom: '15px' }}>
-            <label>Title:</label><br />
-            <input 
-              type="text"
-              value={newProposal.title}
-              onChange={(e) => setNewProposal({ ...newProposal, title: e.target.value })}
-              style={{ width: '100%', padding: '8px', marginTop: '5px' }}
-              placeholder="Proposal title"
-            />
-          </div>
-          <div style={{ marginBottom: '15px' }}>
-            <label>Summary:</label><br />
-            <textarea 
-              value={newProposal.summary}
-              onChange={(e) => setNewProposal({ ...newProposal, summary: e.target.value })}
-              style={{ width: '100%', padding: '8px', marginTop: '5px', minHeight: '80px' }}
-              placeholder="Proposal description"
-            />
-          </div>
-          <div style={{ marginBottom: '15px' }}>
-            <label>New CID:</label><br />
-            <input 
-              type="text"
-              value={newProposal.newCid}
-              onChange={(e) => setNewProposal({ ...newProposal, newCid: e.target.value })}
-              style={{ width: '100%', padding: '8px', marginTop: '5px' }}
-              placeholder="ipfs://..."
-            />
-          </div>
-          <button 
-            onClick={createProposal}
-            disabled={loading}
-            style={{ 
-              padding: '10px 20px', 
-              fontSize: '14px', 
-              backgroundColor: loading ? '#ccc' : '#28a745',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: loading ? 'not-allowed' : 'pointer'
-            }}
-          >
-            {loading ? 'Creating...' : 'Create Proposal'}
-          </button>
-        </div>
-      )}
-
-      <h2>All Proposals ({proposals.length})</h2>
-      
-      {proposals.length === 0 ? (
-        <p style={{ fontStyle: 'italic', color: '#666' }}>No proposals yet</p>
-      ) : (
-        proposals.map(proposal => (
-          <div key={proposal.id} style={{ 
-            marginBottom: '20px', 
-            padding: '20px', 
-            border: '1px solid #ddd', 
-            borderRadius: '8px',
-            backgroundColor: proposal.status === 'accepted' ? '#f0f8f0' : 
-                             proposal.status === 'rejected' ? '#fff0f0' : '#fff'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div style={{ flex: 1 }}>
-                <h3 style={{ margin: '0 0 10px 0' }}>{proposal.title}</h3>
-                <p style={{ margin: '0 0 10px 0', color: '#666' }}>{proposal.summary}</p>
-                <p style={{ margin: '0 0 10px 0', fontSize: '12px' }}>
-                  <strong>Proposer:</strong>{' '}
-                  <span title={proposal.proposer}>{formatAddress(proposal.proposer, identityFor(proposal.proposer))}</span>
-                  {identityFor(proposal.proposer)?.verified && (
-                    <span style={{ marginLeft: '6px', color: '#0f766e', fontSize: '12px' }}>✅</span>
-                  )}
-                  <br />
-                  <strong>New CID:</strong> {proposal.newCid}<br />
-                  <strong>Status:</strong> <span style={{ 
-                    color: proposal.status === 'accepted' ? '#28a745' : 
-                           proposal.status === 'rejected' ? '#dc3545' : '#ffc107'
-                  }}>{proposal.status.toUpperCase()}</span>
-                </p>
-              </div>
-              
-              <div style={{ textAlign: 'center', minWidth: '150px' }}>
-                <div style={{ marginBottom: '10px' }}>
-                  <span style={{ color: '#28a745' }}>👍 {proposal.votesUp}</span>
-                  {' | '}
-                  <span style={{ color: '#dc3545' }}>👎 {proposal.votesDown}</span>
-                </div>
-                
-                {account && proposal.status === 'pending' && !proposal.voters.includes(account.toLowerCase()) && (
-                  <div style={{ marginBottom: '10px' }}>
-                    <button 
-                      onClick={() => vote(proposal.id, true)}
-                      style={{ 
-                        padding: '5px 10px', 
-                        marginRight: '5px',
-                        fontSize: '12px', 
-                        backgroundColor: '#28a745',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '3px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      👍
-                    </button>
-                    <button 
-                      onClick={() => vote(proposal.id, false)}
-                      style={{ 
-                        padding: '5px 10px', 
-                        fontSize: '12px', 
-                        backgroundColor: '#dc3545',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '3px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      👎
-                    </button>
-                  </div>
-                )}
-
-                {isOwner && proposal.status === 'pending' && (
-                  <button 
-                    onClick={() => acceptProposal(proposal.id)}
-                    disabled={loading}
-                    style={{ 
-                      padding: '8px 16px', 
-                      fontSize: '12px', 
-                      backgroundColor: loading ? '#ccc' : '#007bff',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: loading ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    Accept
-                  </button>
-                )}
-              </div>
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg">
+          <div className="grid gap-4 text-sm text-slate-200 sm:grid-cols-2">
+            <div>
+              <p className="text-slate-400">Owner</p>
+              <p className="mt-1 font-medium" title={owner}>
+                {owner ? formatAddress(owner, identityFor(owner)) : "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-slate-400">Your access</p>
+              <p className="mt-1 font-medium">
+                {isOwner ? "✅ Owner (can accept)" : account ? "👁️ Viewer (can vote)" : "Connect wallet"}
+              </p>
             </div>
           </div>
-        ))
-      )}
+        </section>
 
-      {error && (
-        <div style={{ marginTop: '20px', padding: '10px', backgroundColor: '#ffebee', color: '#c62828', borderRadius: '4px' }}>
-          Error: {error}
-        </div>
-      )}
+        <section className="flex flex-wrap items-center justify-between gap-3">
+          <button
+            onClick={() => setShowCreateForm((prev) => !prev)}
+            disabled={!account}
+            className="inline-flex items-center gap-2 rounded-2xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {showCreateForm ? "Cancel" : "New proposal"}
+          </button>
+          {!account && (
+            <p className="text-sm text-slate-400">Connect a wallet to create or vote on proposals.</p>
+          )}
+        </section>
+
+        {showCreateForm && (
+          <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg">
+            <h2 className="text-lg font-semibold">Create proposal</h2>
+            <div className="mt-4 grid gap-4">
+              <label className="text-sm text-slate-200">
+                Title
+                <input
+                  type="text"
+                  value={newProposal.title}
+                  onChange={(event) => setNewProposal({ ...newProposal, title: event.target.value })}
+                  className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-base text-white outline-none ring-primary-500/20 transition focus:border-primary-500/40 focus:ring"
+                  placeholder="Proposal title"
+                />
+              </label>
+              <label className="text-sm text-slate-200">
+                Summary
+                <textarea
+                  value={newProposal.summary}
+                  onChange={(event) => setNewProposal({ ...newProposal, summary: event.target.value })}
+                  rows={4}
+                  className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-base text-white outline-none ring-primary-500/20 transition focus:border-primary-500/40 focus:ring"
+                  placeholder="Describe the change or addition"
+                />
+              </label>
+              <label className="text-sm text-slate-200">
+                New CID
+                <input
+                  type="text"
+                  value={newProposal.newCid}
+                  onChange={(event) => setNewProposal({ ...newProposal, newCid: event.target.value })}
+                  className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-base text-white outline-none ring-primary-500/20 transition focus:border-primary-500/40 focus:ring"
+                  placeholder="ipfs://..."
+                />
+              </label>
+            </div>
+            <button
+              onClick={createProposal}
+              disabled={loading}
+              className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? "Submitting..." : "Submit proposal"}
+            </button>
+          </section>
+        )}
+
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Proposals ({proposals.length})</h2>
+          </div>
+
+          {proposals.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-white/15 bg-white/5 p-10 text-center text-sm text-slate-300">
+              No proposals yet. Be the first to submit one.
+            </div>
+          ) : (
+            proposals.map((proposal) => {
+              const hasVoted = proposal.voters.includes(account?.toLowerCase() || "");
+              return (
+                <article
+                  key={proposal.id}
+                  className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-md transition hover:border-white/20 hover:bg-white/10"
+                >
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-lg font-semibold text-white">{proposal.title}</h3>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium ${statusStyles[proposal.status]}`}
+                        >
+                          {proposal.status.toUpperCase()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-300">{proposal.summary}</p>
+                      <dl className="space-y-1 text-xs text-slate-400">
+                        <div className="flex flex-wrap gap-2">
+                          <dt className="text-slate-500">Proposer:</dt>
+                          <dd title={proposal.proposer}>
+                            {formatAddress(proposal.proposer, identityFor(proposal.proposer))}
+                            {identityFor(proposal.proposer)?.verified && (
+                              <span className="ml-2 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-200">
+                                Verified
+                              </span>
+                            )}
+                          </dd>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <dt className="text-slate-500">CID:</dt>
+                          <dd className="font-mono text-[11px]" title={proposal.newCid}>
+                            {proposal.newCid}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+
+                    <div className="shrink-0 space-y-3 text-sm text-slate-300">
+                      <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-2">
+                        <div className="flex items-center justify-between gap-6">
+                          <span className="inline-flex items-center gap-1">👍 {proposal.votesUp}</span>
+                          <span className="inline-flex items-center gap-1">👎 {proposal.votesDown}</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {!hasVoted && proposal.status === "pending" && account && (
+                          <>
+                            <button
+                              onClick={() => vote(proposal.id, true)}
+                              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-500"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => vote(proposal.id, false)}
+                              className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
+                            >
+                              Reject
+                            </button>
+                          </>
+                        )}
+                        {isOwner && proposal.status === "pending" && (
+                          <button
+                            onClick={() => acceptProposal(proposal.id)}
+                            disabled={loading}
+                            className="inline-flex items-center gap-2 rounded-lg border border-primary-400/40 bg-primary-500/10 px-3 py-1.5 text-xs font-semibold text-primary-100 transition hover:bg-primary-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Accept & sync
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              );
+            })
+          )}
+        </section>
+
+        {error && (
+          <div className="rounded-3xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+            {error}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

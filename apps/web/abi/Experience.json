@@ -91,6 +91,13 @@
   },
   {
     "type": "function",
+    "name": "proposerFeeBps",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "uint16"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "balanceOf",
     "inputs": [
       {"name": "account", "type": "address"},

@@ -1,46 +1,50 @@
 "use client";
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { formatEther } from 'viem';
-import ExperienceAbi from '../../../../abi/Experience.json';
-import { useWallet } from '../../../../contexts/WalletContext';
-import WalletButton from '../../../../components/WalletButton';
-import { publicClient } from '../../../../lib/viemClient';
-import { fetchExperienceMetadata } from '../../../../lib/experienceMetadata';
-import { lighthouseService } from '../../../../lib/lighthouse';
-import { resolveAddressIdentity, formatAddress, AddressIdentity } from '../../../../lib/identity';
 
-export default function BuyPage({ params }: { params: { address: string } }) {
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { formatEther } from "viem";
+import ExperienceAbi from "@/abi/Experience.json";
+import WalletButton from "@/components/WalletButton";
+import { useWallet } from "@/contexts/WalletContext";
+import { fetchExperienceMetadata } from "@/lib/experienceMetadata";
+import { resolveAddressIdentity, formatAddress, AddressIdentity } from "@/lib/identity";
+import { lighthouseService } from "@/lib/lighthouse";
+import { publicClient } from "@/lib/viemClient";
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+export default function BuyExperiencePage({ params }: { params: { address: string } }) {
   const experience = params.address as `0x${string}`;
   const router = useRouter();
   const { account, wallet, isConnected, isWrongNetwork } = useWallet();
+
   const [priceEthWei, setPriceEthWei] = useState<bigint>(0n);
-  const [cid, setCid] = useState<string>('');
-  const [currentProposer, setCurrentProposer] = useState<string>('');
-  const [owner, setOwner] = useState<string>('');
+  const [cid, setCid] = useState<string>("");
+  const [currentProposer, setCurrentProposer] = useState<string>("");
+  const [owner, setOwner] = useState<string>("");
   const [qty, setQty] = useState<number>(1);
-  const [loading, setLoading] = useState<string>('');
-  const [txHash, setTxHash] = useState<string>('');
-  const [error, setError] = useState<string>('');
+  const [loadingMessage, setLoadingMessage] = useState<string>("");
+  const [txHash, setTxHash] = useState<string>("");
+  const [error, setError] = useState<string>("");
   const [passBalance, setPassBalance] = useState<bigint>(0n);
-  const [experienceName, setExperienceName] = useState<string>('');
-  const [experienceSummary, setExperienceSummary] = useState<string>('');
+  const [experienceName, setExperienceName] = useState<string>("");
+  const [experienceSummary, setExperienceSummary] = useState<string>("");
   const [metadataLoading, setMetadataLoading] = useState<boolean>(false);
   const [platformFeeBps, setPlatformFeeBps] = useState<number>(500);
   const [proposerFeeBps, setProposerFeeBps] = useState<number>(1000);
-  const [purchaseHash, setPurchaseHash] = useState<string>('');
+  const [purchaseHash, setPurchaseHash] = useState<string>("");
   const [ownerIdentity, setOwnerIdentity] = useState<AddressIdentity | null>(null);
   const [proposerIdentity, setProposerIdentity] = useState<AddressIdentity | null>(null);
 
-  const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
   const salesPaused = priceEthWei === 0n;
+  const hasProposer = Boolean(currentProposer && currentProposer !== ZERO_ADDRESS);
   const totalCostWei = priceEthWei * BigInt(qty);
-  const platformAmountWei = totalCostWei * BigInt(platformFeeBps) / 10_000n;
-  const proposerAmountWei = totalCostWei * BigInt(proposerFeeBps) / 10_000n;
+  const platformAmountWei = (totalCostWei * BigInt(platformFeeBps)) / 10_000n;
+  const proposerAmountWei = hasProposer
+    ? (totalCostWei * BigInt(proposerFeeBps)) / 10_000n
+    : 0n;
   const creatorShareBps = Math.max(0, 10_000 - platformFeeBps - proposerFeeBps);
   const creatorAmountWei = totalCostWei - platformAmountWei - proposerAmountWei;
-  const safeCreatorAmountWei = creatorAmountWei >= 0n ? creatorAmountWei : 0n;
-  const hasProposer = Boolean(currentProposer && currentProposer !== ZERO_ADDRESS);
 
   useEffect(() => {
     loadContractData();
@@ -50,70 +54,21 @@ export default function BuyPage({ params }: { params: { address: string } }) {
     if (isConnected && !isWrongNetwork) {
       loadPassBalance();
     }
-  }, [isConnected, isWrongNetwork, account, txHash]);
+  }, [isConnected, isWrongNetwork, account, txHash, experience]);
 
   useEffect(() => {
     if (!account) {
-      setPurchaseHash('');
+      setPurchaseHash("");
       return;
     }
-
-    try {
-      const stored = lighthouseService.loadPurchaseHashFromLocalStorage(account);
-      if (stored) {
-        setPurchaseHash(stored);
-      }
-    } catch (err) {
-      console.warn('Purchase hash lookup failed:', err);
-    }
+    const stored = lighthouseService.loadPurchaseHashFromLocalStorage(account);
+    if (stored) setPurchaseHash(stored);
   }, [account]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function resolveOwner() {
-      if (!owner) {
-        setOwnerIdentity(null);
-        return;
-      }
-      const identity = await resolveAddressIdentity(owner);
-      if (!cancelled) {
-        setOwnerIdentity(identity);
-      }
-    }
-
-    resolveOwner();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [owner]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function resolveProposer() {
-      if (!currentProposer) {
-        setProposerIdentity(null);
-        return;
-      }
-      const identity = await resolveAddressIdentity(currentProposer);
-      if (!cancelled) {
-        setProposerIdentity(identity);
-      }
-    }
-
-    resolveProposer();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentProposer]);
-
-  useEffect(() => {
     if (!cid) {
-      setExperienceName('');
-      setExperienceSummary('');
+      setExperienceName("");
+      setExperienceSummary("");
       return;
     }
 
@@ -123,18 +78,13 @@ export default function BuyPage({ params }: { params: { address: string } }) {
     async function loadMetadata() {
       try {
         setMetadataLoading(true);
-        setExperienceName('');
-        setExperienceSummary('');
-
         const metadata = await fetchExperienceMetadata(cid, controller.signal);
-        if (cancelled || !metadata) return;
-
-        setExperienceName(metadata.name);
-        setExperienceSummary(metadata.description);
-      } finally {
-        if (!cancelled) {
-          setMetadataLoading(false);
+        if (!cancelled && metadata) {
+          setExperienceName(metadata.name);
+          setExperienceSummary(metadata.description);
         }
+      } finally {
+        if (!cancelled) setMetadataLoading(false);
       }
     }
 
@@ -146,107 +96,128 @@ export default function BuyPage({ params }: { params: { address: string } }) {
     };
   }, [cid]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadOwnerIdentity() {
+      if (!owner) {
+        setOwnerIdentity(null);
+        return;
+      }
+      const identity = await resolveAddressIdentity(owner);
+      if (!cancelled) setOwnerIdentity(identity);
+    }
+    loadOwnerIdentity();
+    return () => {
+      cancelled = true;
+    };
+  }, [owner]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadProposerIdentity() {
+      if (!hasProposer) {
+        setProposerIdentity(null);
+        return;
+      }
+      const identity = await resolveAddressIdentity(currentProposer);
+      if (!cancelled) setProposerIdentity(identity);
+    }
+    loadProposerIdentity();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentProposer, hasProposer]);
+
   async function loadContractData() {
     try {
-      setLoading('Loading contract data...');
-      setError('');
-      
-      // Add timeout wrapper to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Contract data loading timeout')), 8000)
+      setLoadingMessage("Fetching experience data...");
+      setError("");
+
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout")), 8000)
       );
 
       const dataPromise = Promise.all([
         publicClient.readContract({
           address: experience,
           abi: ExperienceAbi.abi,
-          functionName: 'priceEthWei',
+          functionName: "priceEthWei",
         }),
         publicClient.readContract({
           address: experience,
           abi: ExperienceAbi.abi,
-          functionName: 'cid',
+          functionName: "cid",
         }),
         publicClient.readContract({
           address: experience,
           abi: ExperienceAbi.abi,
-          functionName: 'currentProposer',
+          functionName: "currentProposer",
         }),
         publicClient.readContract({
           address: experience,
           abi: ExperienceAbi.abi,
-          functionName: 'owner',
+          functionName: "owner",
         }),
         publicClient.readContract({
           address: experience,
           abi: ExperienceAbi.abi,
-          functionName: 'PLATFORM_FEE_BPS',
+          functionName: "PLATFORM_FEE_BPS",
         }),
         publicClient.readContract({
           address: experience,
           abi: ExperienceAbi.abi,
-          functionName: 'proposerFeeBps',
+          functionName: "proposerFeeBps",
         }),
       ]);
 
-      const [price, cidResult, proposer, ownerResult, platformBps, proposerBps] = await Promise.race([
-        dataPromise,
-        timeoutPromise
-      ]) as [bigint, string, string, string, number | bigint, number | bigint];
+      const [price, cidValue, proposer, ownerValue, platformBps, proposerBps] =
+        (await Promise.race([dataPromise, timeout])) as [
+          bigint,
+          string,
+          string,
+          string,
+          bigint | number,
+          bigint | number
+        ];
 
       setPriceEthWei(price);
-      setCid(cidResult);
+      setCid(cidValue);
       setCurrentProposer(proposer);
-      setOwner(ownerResult);
+      setOwner(ownerValue);
       setPlatformFeeBps(Number(platformBps));
       setProposerFeeBps(Number(proposerBps));
-
     } catch (err: any) {
-      console.error('Failed to load contract data:', err);
-      
-      // Handle specific error types
-      if (err.name === 'AbortError' || err.message?.includes('aborted')) {
-        setError('Network request was cancelled. Please try refreshing the page.');
-      } else if (err.message?.includes('timeout')) {
-        setError('Request timed out. Please check your network connection and try again.');
-      } else if (err.message?.includes('Contract read failed')) {
-        setError('Invalid experience contract. Please verify the contract address.');
+      if (err.name === "AbortError" || err.message === "Timeout") {
+        setError("Network request timed out. Refresh to try again.");
       } else {
-        setError('Failed to load experience data: ' + (err.shortMessage || err.message));
+        setError("Failed to load experience: " + (err.shortMessage || err.message));
       }
     } finally {
-      setLoading('');
+      setLoadingMessage("");
     }
   }
 
   async function loadPassBalance() {
     if (!account) return;
-    
+
     try {
-      // Add timeout for balance loading too
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Balance loading timeout')), 5000)
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout")), 5000)
       );
 
-      const balancePromise = publicClient.readContract({
-        address: experience,
-        abi: ExperienceAbi.abi,
-        functionName: 'balanceOf',
-        args: [account as `0x${string}`, 1n], // PASS_ID = 1
-      });
-
-      const balance = await Promise.race([
-        balancePromise,
-        timeoutPromise
-      ]) as bigint;
+      const balance = (await Promise.race([
+        publicClient.readContract({
+          address: experience,
+          abi: ExperienceAbi.abi,
+          functionName: "balanceOf",
+          args: [account as `0x${string}`, 1n],
+        }),
+        timeout,
+      ])) as bigint;
 
       setPassBalance(balance);
-    } catch (err: any) {
-      console.error('Failed to load pass balance:', err);
-      // Don't show error for balance loading failure, just log it
-      if (err.name !== 'AbortError' && !err.message?.includes('timeout')) {
-        console.warn('Balance check failed, assuming no passes:', err.message);
-      }
+    } catch (err) {
+      console.warn("Unable to read pass balance", err);
       setPassBalance(0n);
     }
   }
@@ -255,7 +226,7 @@ export default function BuyPage({ params }: { params: { address: string } }) {
     if (!account) return;
 
     try {
-      const purchaseRecord = {
+      const record = {
         experience,
         purchaser: account,
         totalQuantity: quantity,
@@ -268,7 +239,7 @@ export default function BuyPage({ params }: { params: { address: string } }) {
 
       const newHash = await lighthouseService.addPurchaseToList(
         account,
-        purchaseRecord,
+        record,
         purchaseHash || undefined
       );
 
@@ -277,530 +248,329 @@ export default function BuyPage({ params }: { params: { address: string } }) {
         lighthouseService.savePurchaseHashToLocalStorage(account, newHash);
       }
     } catch (err) {
-      console.warn('Failed to persist purchase to Lighthouse:', err);
+      console.warn("Failed to persist purchase", err);
     }
   }
 
   async function handleBuy() {
     if (!wallet || !account) {
-      setError('Please connect your wallet first');
+      setError("Connect your wallet to continue.");
       return;
     }
 
     if (isWrongNetwork) {
-      setError('Please switch to Sepolia network first');
+      setError("Switch to the Sepolia network to continue.");
       return;
     }
 
     try {
-      setLoading('Preparing transaction...');
-      setError('');
-      
+      setLoadingMessage("Preparing transaction...");
+      setError("");
+
       const value = priceEthWei * BigInt(qty);
-      
       const { request } = await publicClient.simulateContract({
         address: experience,
         abi: ExperienceAbi.abi,
-        functionName: 'buyWithEth',
+        functionName: "buyWithEth",
         args: [BigInt(qty)],
         account: account as `0x${string}`,
         value,
       });
 
-      setLoading('Please confirm transaction in wallet...');
+      setLoadingMessage("Confirm in your wallet...");
       const hash = await wallet.writeContract(request);
       setTxHash(hash);
-      
-      setLoading('Transaction submitted, waiting for confirmation...');
-      await publicClient.waitForTransactionReceipt({ hash });
 
-      setLoading('Purchase confirmed! Redirecting...');
+      setLoadingMessage("Waiting for confirmation...");
+      await publicClient.waitForTransactionReceipt({ hash });
       await recordPurchase(hash, qty);
+
+      setLoadingMessage("Purchase confirmed! Redirecting...");
       setTimeout(() => {
         router.push(`/experience/${experience}`);
-      }, 1500);
-
+      }, 1200);
     } catch (err: any) {
-      console.error('Transaction failed:', err);
-      setError('Transaction failed: ' + (err.shortMessage || err.message));
-      setLoading('');
+      console.error("Buy failed", err);
+      setLoadingMessage("");
+      setError("Transaction failed: " + (err.shortMessage || err.message));
     }
   }
 
+  const splitBreakdown = useMemo(
+    () => [
+      { label: "Creator", value: `${(creatorShareBps / 100).toFixed(2)}%`, amount: creatorAmountWei },
+      { label: "Platform", value: `${(platformFeeBps / 100).toFixed(2)}%`, amount: platformAmountWei },
+      {
+        label: hasProposer ? "Current proposer" : "Proposer",
+        value: hasProposer ? `${(proposerFeeBps / 100).toFixed(2)}%` : "—",
+        amount: proposerAmountWei,
+      },
+    ],
+    [creatorShareBps, creatorAmountWei, platformFeeBps, platformAmountWei, hasProposer, proposerFeeBps, proposerAmountWei]
+  );
+
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '20px'
-    }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        maxWidth: '1200px',
-        margin: '0 auto 40px auto',
-        padding: '0 20px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <a 
-            href="/"
-            style={{
-              fontSize: '24px',
-              fontWeight: 'bold',
-              color: 'white',
-              textDecoration: 'none'
-            }}
-          >
-            🌟 Experience Protocol
-          </a>
-          <a 
-            href="/experience"
-            style={{
-              color: 'rgba(255,255,255,0.8)',
-              textDecoration: 'none',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              border: '1px solid rgba(255,255,255,0.3)',
-              transition: 'all 0.2s'
-            }}
-          >
-            📊 My Passes
-          </a>
-          <a 
-            href="/creator"
-            style={{
-              color: 'rgba(255,255,255,0.8)',
-              textDecoration: 'none',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              border: '1px solid rgba(255,255,255,0.3)',
-              transition: 'all 0.2s'
-            }}
-          >
-            🎨 Creator Hub
-          </a>
-          <a 
-            href="/create"
-            style={{
-              color: 'rgba(255,255,255,0.8)',
-              textDecoration: 'none',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              border: '1px solid rgba(255,255,255,0.3)',
-              transition: 'all 0.2s'
-            }}
-          >
-            🌍 Create New
-          </a>
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
+      <header className="border-b border-white/10 bg-black/40 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+          <div className="flex items-center gap-3">
+            <span className="rounded-lg bg-primary-600 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-white">XP</span>
+            <span className="text-lg font-semibold">Experience Protocol</span>
+          </div>
+          <WalletButton size="md" />
         </div>
-        
-        {/* Wallet Status */}
-        <WalletButton size="md" />
-      </div>
+      </header>
 
-      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-        {!isConnected ? (
-          <div style={{
-            textAlign: 'center',
-            padding: '60px 20px',
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
-          }}>
-            <div style={{ fontSize: '64px', marginBottom: '16px' }}>🔗</div>
-            <h2 style={{ margin: '0 0 8px 0', color: '#1e293b' }}>Connect Your Wallet</h2>
-            <p style={{ margin: '0 0 20px 0', color: '#6b7280' }}>
-              Connect your wallet to purchase an access pass
-            </p>
-            <WalletButton size="lg" />
-          </div>
-        ) : isWrongNetwork ? (
-          <div style={{
-            textAlign: 'center',
-            padding: '60px 20px',
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
-          }}>
-            <div style={{ fontSize: '64px', marginBottom: '16px' }}>🔗</div>
-            <h2 style={{ margin: '0 0 8px 0', color: '#1e293b' }}>Wrong Network</h2>
-            <p style={{ margin: '0 0 20px 0', color: '#6b7280' }}>
-              Please switch to Sepolia testnet to continue
-            </p>
-            <WalletButton size="lg" />
-          </div>
-        ) : (
-          <>
-            {/* Main Content */}
-            {passBalance > 0n && (
-              <div style={{
-                backgroundColor: 'white',
-                borderRadius: '12px',
-                padding: '40px',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-                marginBottom: '20px'
-              }}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: '40px 20px',
-                  backgroundColor: '#f0fdf4',
-                  borderRadius: '12px',
-                  border: '2px solid #22c55e'
-                }}>
-                  <div style={{ fontSize: '64px', marginBottom: '16px' }}>🎉</div>
-                  <h2 style={{ margin: '0 0 16px 0', color: '#15803d' }}>
-                    You already own this experience!
-                  </h2>
-                  <p style={{ margin: '0 0 20px 0', color: '#166534', fontSize: '18px' }}>
-                    {experienceName || 'This experience'} is now unlocked.
-                  </p>
-                  <p style={{ margin: '0 0 24px 0', color: '#166534', fontSize: '16px' }}>
-                    Passes held: {passBalance.toString()} token{passBalance > 1n ? 's' : ''}
-                  </p>
-                  <button
-                    onClick={() => router.push(`/experience/${experience}`)}
-                    style={{
-                      padding: '14px 28px',
-                      backgroundColor: '#15803d',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      fontSize: '16px',
-                      cursor: 'pointer',
-                      fontWeight: 600
-                    }}
-                  >
-                    🚀 View Unlocked Experience
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div style={{
-              backgroundColor: 'white',
-              borderRadius: '12px',
-              padding: '40px',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
-            }}>
-              <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-                <h1 style={{ margin: '0 0 16px 0', fontSize: '36px', color: '#1e293b' }}>
-                  🎫 {experienceName ? `Buy Access to ${experienceName}` : 'Buy Access Pass'}
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 lg:flex-row lg:py-12">
+        <section className="w-full space-y-6 lg:w-2/3">
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">{experience}</p>
+                <h1 className="text-2xl font-semibold md:text-3xl">
+                  {experienceName || "Access Pass"}
                 </h1>
-                {metadataLoading ? (
-                  <p style={{ margin: '0', fontSize: '18px', color: '#6b7280' }}>
-                    Loading experience details...
-                  </p>
-                ) : (
-                  <p style={{ margin: '0', fontSize: '18px', color: '#6b7280' }}>
-                    {experienceSummary || 'Purchase an exclusive soulbound NFT pass to unlock this experience.'}
-                  </p>
-                )}
+                <p className="text-sm text-slate-300">
+                  {metadataLoading
+                    ? "Loading experience details..."
+                    : experienceSummary || "Token-gated content managed on-chain."}
+                </p>
               </div>
-
-              {salesPaused && (
-                <div style={{
-                  marginBottom: '24px',
-                  padding: '16px',
-                  borderRadius: '8px',
-                  backgroundColor: '#fef3c7',
-                  border: '1px solid #facc15',
-                  color: '#92400e'
-                }}>
-                  Sales are currently paused by the creator. You can still review the experience details below.
-                </div>
-              )}
-
-              {/* Experience Details */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-                gap: '20px',
-                marginBottom: '40px'
-              }}>
-                <div style={{
-                  padding: '20px',
-                  backgroundColor: '#f8fafc',
-                  borderRadius: '8px',
-                  border: '1px solid #e2e8f0'
-                }}>
-                  <h3 style={{ margin: '0 0 12px 0', color: '#1e293b' }}>💰 Price</h3>
-                  <p style={{ margin: '0', fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
-                    {formatEther(priceEthWei)} ETH
-                  </p>
-                  <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '14px' }}>
-                    per access pass
-                  </p>
-                </div>
-
-                <div style={{
-                  padding: '20px',
-                  backgroundColor: '#f8fafc',
-                  borderRadius: '8px',
-                  border: '1px solid #e2e8f0'
-                }}>
-                  <h3 style={{ margin: '0 0 12px 0', color: '#1e293b' }}>👑 Creator</h3>
-                  <p
-                    title={owner}
-                    style={{
-                      margin: '0',
-                      fontSize: '14px',
-                      color: '#4b5563',
-                      wordBreak: 'break-all'
-                    }}
-                  >
-                    {formatAddress(owner, ownerIdentity)}
-                  </p>
+              <div className="flex flex-col items-start gap-2 text-sm text-slate-200">
+                <span>
+                  Creator: {formatAddress(owner, ownerIdentity)}
                   {ownerIdentity?.verified && (
-                    <span style={{
-                      marginTop: '8px',
-                      display: 'inline-block',
-                      fontSize: '12px',
-                      color: '#0f766e'
-                    }}>
-                      ✅ Self-verified
+                    <span className="ml-2 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-200">
+                      Verified
                     </span>
                   )}
-                </div>
-
-                {hasProposer && (
-                  <div style={{
-                    padding: '20px',
-                    backgroundColor: '#f8fafc',
-                    borderRadius: '8px',
-                    border: '1px solid #e2e8f0'
-                  }}>
-                    <h3 style={{ margin: '0 0 12px 0', color: '#1e293b' }}>🤝 Current Proposer</h3>
-                    <p
-                      title={currentProposer}
-                      style={{
-                        margin: '0',
-                        fontSize: '14px',
-                        color: '#4b5563',
-                        wordBreak: 'break-all'
-                      }}
+                </span>
+                <span>
+                  Current price:
+                  <span className="ml-1 text-lg font-semibold text-primary-200">
+                    {formatEther(priceEthWei)} ETH
+                  </span>
+                </span>
+                <div className="flex flex-wrap gap-2 text-xs uppercase tracking-wide text-slate-400">
+                  {splitBreakdown.map(({ label, value }) => (
+                    <span
+                      key={label}
+                      className="rounded-full border border-white/10 bg-white/10 px-3 py-1"
                     >
-                      {formatAddress(currentProposer, proposerIdentity)}
-                    </p>
-                    <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#64748b' }}>
-                      Earns {proposerFeeBps / 100}% of each sale
-                    </p>
-                  </div>
+                      {label}: {value}
+                    </span>
+                  ))}
+                </div>
+                {salesPaused && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-yellow-500/40 bg-yellow-500/10 px-3 py-1 text-xs text-yellow-200">
+                    Sales paused by creator
+                  </span>
                 )}
-
-                <div style={{
-                  padding: '20px',
-                  backgroundColor: '#f8fafc',
-                  borderRadius: '8px',
-                  border: '1px solid #e2e8f0'
-                }}>
-                  <h3 style={{ margin: '0 0 12px 0', color: '#1e293b' }}>📦 Experience</h3>
-                  <p style={{ margin: '0', fontWeight: 600, color: '#1e293b' }}>
-                    {experienceName || 'Experience Pass'}
-                  </p>
-                  <p style={{ margin: '8px 0 0 0', color: '#6b7280', fontSize: '14px' }}>
-                    {experienceSummary ? experienceSummary : 'Metadata loaded from contract CID.'}
-                  </p>
-                  {cid && (
-                    <p style={{
-                      margin: '12px 0 0 0',
-                      fontSize: '12px',
-                      color: '#94a3b8',
-                      wordBreak: 'break-all'
-                    }}>
-                      CID: {cid}
-                    </p>
-                  )}
-                </div>
-
-                <div style={{
-                  padding: '20px',
-                  backgroundColor: '#f8fafc',
-                  borderRadius: '8px',
-                  border: '1px solid #e2e8f0'
-                }}>
-                  <h3 style={{ margin: '0 0 12px 0', color: '#1e293b' }}>💸 Revenue Split</h3>
-                  <ul style={{
-                    margin: 0,
-                    paddingLeft: '18px',
-                    color: '#475569',
-                    fontSize: '14px'
-                  }}>
-                    <li>Creator: {(creatorShareBps / 100).toFixed(2)}%</li>
-                    <li>Platform: {(platformFeeBps / 100).toFixed(2)}%</li>
-                    <li>Proposer: {(proposerFeeBps / 100).toFixed(2)}%</li>
-                  </ul>
-                </div>
               </div>
+            </div>
+          </div>
 
-              {/* Purchase Form */}
-              <div style={{
-                padding: '30px',
-                backgroundColor: '#f8fafc',
-                borderRadius: '12px',
-                border: '1px solid #e2e8f0'
-              }}>
-                <h3 style={{ margin: '0 0 20px 0', color: '#1e293b' }}>Purchase Details</h3>
-
-                <div style={{ marginBottom: '20px' }}>
-                  <label style={{
-                    display: 'block',
-                    marginBottom: '8px',
-                    fontWeight: '500',
-                    color: '#374151'
-                  }}>
-                    Quantity
-                  </label>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+              <h2 className="text-lg font-semibold">Purchase</h2>
+              <p className="mt-1 text-sm text-slate-300">
+                Buy passes for yourself or a team in a single transaction.
+              </p>
+              <div className="mt-4 space-y-5">
+                <label className="block text-sm font-medium text-slate-200">
+                  Quantity
                   <input
                     type="number"
-                    min="1"
-                    max="10"
+                    min={1}
+                    max={10}
                     value={qty}
-                    onChange={(e) => setQty(parseInt(e.target.value) || 1)}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '8px',
-                      fontSize: '16px'
+                    onChange={(event) => {
+                      const value = Number(event.target.value) || 1;
+                      setQty(Math.max(1, Math.min(10, value)));
                     }}
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-base text-white outline-none ring-primary-500/20 transition focus:border-primary-500/40 focus:ring"
                   />
-                </div>
+                </label>
 
-                <div style={{
-                  padding: '16px',
-                  backgroundColor: 'white',
-                  borderRadius: '8px',
-                  marginBottom: '20px',
-                  border: '1px solid #e5e7eb'
-                }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
-                    <span style={{ color: '#6b7280' }}>Total Cost:</span>
-                    <span style={{
-                      fontSize: '20px',
-                      fontWeight: 'bold',
-                      color: '#059669'
-                    }}>
-                      {formatEther(priceEthWei * BigInt(qty))} ETH
+                <div className="rounded-2xl border border-white/10 bg-black/40 p-4">
+                  <div className="flex items-center justify-between text-sm text-slate-300">
+                    <span>Total cost</span>
+                    <span className="text-lg font-semibold text-primary-200">
+                      {formatEther(totalCostWei)} ETH
                     </span>
                   </div>
-                  {totalCostWei > 0n && (
-                    <div style={{
-                      marginTop: '12px',
-                      fontSize: '12px',
-                      color: '#64748b',
-                      lineHeight: '18px'
-                    }}>
-                      <div>Creator receives {formatEther(safeCreatorAmountWei)} ETH</div>
-                      <div>Platform receives {formatEther(platformAmountWei)} ETH</div>
-                      {hasProposer ? (
-                        <div>Proposer receives {formatEther(proposerAmountWei)} ETH</div>
-                      ) : (
-                        <div>No proposer set — full share goes to creator</div>
-                      )}
-                    </div>
-                  )}
+                  <div className="mt-3 space-y-2 text-xs text-slate-400">
+                    {splitBreakdown.map(({ label, value, amount }) => (
+                      <div className="flex items-center justify-between" key={label}>
+                        <span>{label}</span>
+                        <span>
+                          {value}
+                          {totalCostWei > 0n && amount > 0n && (
+                            <span className="ml-2 font-semibold text-slate-200">
+                              {formatEther(amount)} ETH
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {error && (
-                  <div style={{
-                    padding: '12px',
-                    backgroundColor: '#fef2f2',
-                    borderRadius: '8px',
-                    border: '1px solid #fca5a5',
-                    marginBottom: '20px'
-                  }}>
-                    <p style={{ margin: '0 0 8px 0', color: '#dc2626', fontSize: '14px' }}>
-                      ❌ {error}
-                    </p>
-                    {(error.includes('timeout') || error.includes('aborted') || error.includes('cancelled')) && (
+                  <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">
+                    <p>{error}</p>
+                    {(error.toLowerCase().includes("timeout") || error.toLowerCase().includes("cancel")) && (
                       <button
                         onClick={() => {
-                          setError('');
+                          setError("");
                           loadContractData();
                         }}
-                        style={{
-                          padding: '6px 12px',
-                          backgroundColor: '#dc2626',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          cursor: 'pointer'
-                        }}
+                        className="mt-3 inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-xs text-white transition hover:bg-white/20"
                       >
-                        🔄 Retry
+                        Retry
                       </button>
                     )}
                   </div>
                 )}
 
                 {txHash && (
-                  <div style={{
-                    padding: '12px',
-                    backgroundColor: '#f0fdf4',
-                    borderRadius: '8px',
-                    border: '1px solid #22c55e',
-                    marginBottom: '20px'
-                  }}>
-                    <p style={{ margin: '0', color: '#15803d', fontSize: '14px' }}>
-                      ✅ Transaction:
-                      <a
-                        href={`https://sepolia.etherscan.io/tx/${txHash}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ marginLeft: '4px', color: '#059669' }}
-                      >
-                        View on Etherscan ↗
-                      </a>
-                    </p>
+                  <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-xs text-emerald-100">
+                    <p className="font-semibold">Transaction submitted</p>
+                    <a
+                      href={`https://sepolia.etherscan.io/tx/${txHash}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 inline-flex items-center gap-2 text-emerald-200 underline underline-offset-4"
+                    >
+                      View on Etherscan
+                    </a>
                   </div>
                 )}
 
                 <button
                   onClick={handleBuy}
-                  disabled={loading !== '' || priceEthWei === 0n}
-                  style={{
-                    width: '100%',
-                    padding: '16px',
-                    backgroundColor: loading !== '' || priceEthWei === 0n ? '#9ca3af' : '#059669',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '18px',
-                    fontWeight: 'bold',
-                    cursor: loading !== '' || priceEthWei === 0n ? 'not-allowed' : 'pointer',
-                    transition: 'background-color 0.2s'
-                  }}
+                  disabled={
+                    loadingMessage.length > 0 || priceEthWei === 0n || !isConnected || salesPaused
+                  }
+                  className="w-full rounded-2xl bg-primary-600 px-6 py-3 text-base font-semibold text-white transition hover:bg-primary-500 focus:outline-none focus-visible:ring focus-visible:ring-primary-500/40 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {loading || `🎫 Buy ${qty} Access Pass${qty > 1 ? 'es' : ''}`}
+                  {loadingMessage || `Buy ${qty} pass${qty > 1 ? "es" : ""}`}
                 </button>
               </div>
+            </div>
 
-              {/* Info */}
-              <div style={{
-                marginTop: '30px',
-                padding: '20px',
-                backgroundColor: '#fffbeb',
-                borderRadius: '8px',
-                border: '1px solid #f59e0b'
-              }}>
-                <h4 style={{ margin: '0 0 12px 0', color: '#92400e' }}>ℹ️ About Access Passes</h4>
-                <ul style={{ margin: '0', paddingLeft: '20px', color: '#92400e' }}>
-                  <li>Passes are soulbound NFTs (non-transferable)</li>
-                  <li>One-time purchase grants permanent access</li>
-                  <li>Payments are automatically split between creator, collaborators, and platform</li>
-                  <li>Built on Ethereum Sepolia testnet</li>
-                </ul>
+            <div className="space-y-4">
+              {!isConnected ? (
+                <div className="rounded-3xl border border-dashed border-white/20 bg-black/40 p-6 text-center">
+                  <p className="text-lg font-semibold">Connect your wallet</p>
+                  <p className="mt-2 text-sm text-slate-300">
+                    You need a wallet connection to continue.
+                  </p>
+                  <div className="mt-6 flex justify-center">
+                    <WalletButton size="lg" />
+                  </div>
+                </div>
+              ) : isWrongNetwork ? (
+                <div className="rounded-3xl border border-yellow-500/30 bg-yellow-500/10 p-6 text-center text-sm text-yellow-100">
+                  Switch to Sepolia to complete your purchase.
+                </div>
+              ) : passBalance > 0n ? (
+                <div className="rounded-3xl border border-emerald-500/30 bg-emerald-500/10 p-6 text-sm text-emerald-100">
+                  <p className="text-lg font-semibold">You already own this experience</p>
+                  <p className="mt-2">
+                    Passes held: {passBalance.toString()} token{passBalance > 1n ? "s" : ""}
+                  </p>
+                  <button
+                    onClick={() => router.push(`/experience/${experience}`)}
+                    className="mt-4 inline-flex items-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/20"
+                  >
+                    View unlocked content
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-6 text-sm text-slate-200">
+                  <h2 className="text-lg font-semibold text-white">What you get</h2>
+                  <ul className="mt-3 space-y-2 text-sm text-slate-300">
+                    <li className="flex items-start gap-2">
+                      <span className="mt-1 inline-block h-2 w-2 rounded-full bg-primary-400" />
+                      Instant soulbound pass minted to your wallet
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="mt-1 inline-block h-2 w-2 rounded-full bg-primary-400" />
+                      Multi-quantity checkout in a single transaction
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="mt-1 inline-block h-2 w-2 rounded-full bg-primary-400" />
+                      Automatic revenue split written on-chain
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="mt-1 inline-block h-2 w-2 rounded-full bg-primary-400" />
+                      Transparent `Bought(buyer, qty, paidWei)` receipt
+                    </li>
+                  </ul>
+                </div>
+              )}
+
+              <div className="rounded-3xl border border-white/10 bg-black/40 p-6 text-sm text-slate-200">
+                <h2 className="text-lg font-semibold text-white">Current settings</h2>
+                <dl className="mt-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <dt className="text-slate-400">Sales status</dt>
+                    <dd className="font-medium">
+                      {salesPaused ? "Paused" : "Active"}
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <dt className="text-slate-400">Proposer</dt>
+                    <dd className="font-medium">
+                      {hasProposer ? formatAddress(currentProposer, proposerIdentity) : "None"}
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <dt className="text-slate-400">Metadata CID</dt>
+                    <dd className="truncate font-mono text-xs text-primary-200" title={cid}>
+                      {cid || "Not set"}
+                    </dd>
+                  </div>
+                </dl>
               </div>
             </div>
-          </>
-          )}
-        </div>
+          </div>
+        </section>
+
+        <aside className="w-full space-y-4 lg:w-1/3">
+          <div className="rounded-3xl border border-white/10 bg-black/30 p-6 text-sm text-slate-200">
+            <h2 className="text-lg font-semibold text-white">Why soulbound?</h2>
+            <ul className="mt-3 space-y-2">
+              <li className="flex items-start gap-2">
+                <span className="mt-1 inline-block h-2 w-2 rounded-full bg-primary-400" />
+                Non-transferable passes keep holders safe from token drains.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1 inline-block h-2 w-2 rounded-full bg-primary-400" />
+                Perfect for curated lists, memberships, and top-contributor rewards.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1 inline-block h-2 w-2 rounded-full bg-primary-400" />
+                On-chain receipts and proposer rewards keep incentives aligned.
+              </li>
+            </ul>
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-black/30 p-6 text-sm text-slate-200">
+            <h2 className="text-lg font-semibold text-white">Need to update settings?</h2>
+            <p className="mt-2 text-sm text-slate-300">
+              Manage pricing, proposer, or CID in the owner dashboard.
+            </p>
+            <button
+              onClick={() => router.push(`/experience/${experience}/settings`)}
+              className="mt-4 inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+            >
+              Open settings
+            </button>
+          </div>
+        </aside>
+      </main>
     </div>
   );
 }
