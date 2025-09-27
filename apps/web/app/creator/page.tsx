@@ -591,6 +591,23 @@ export default function CreatorDashboard() {
         <p style={{ marginBottom: '30px', color: '#6b7280' }}>
           Connect your wallet to manage your experiences
         </p>
+        
+        {/* Debug info */}
+        <div style={{ 
+          marginBottom: '20px', 
+          padding: '10px', 
+          backgroundColor: '#f3f4f6', 
+          borderRadius: '8px',
+          fontSize: '12px',
+          textAlign: 'left'
+        }}>
+          <strong>Debug Info:</strong><br/>
+          Account: {account || 'None'}<br/>
+          Connected: {isConnected ? 'Yes' : 'No'}<br/>
+          Wrong Network: {isWrongNetwork ? 'Yes' : 'No'}<br/>
+          Wallet: {wallet ? 'Available' : 'None'}
+        </div>
+        
         <WalletButton size="lg" />
       </div>
     );
