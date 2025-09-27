@@ -71,49 +71,71 @@ export default function CreatorDashboard() {
     try {
       setLoading('Loading experiences...');
       
-      // 1. Try loading from Lighthouse first (fastest)
+      // Step 1: Load from Lighthouse (historical data)
       let lighthouseExperiences: ExperienceIndex[] = [];
       if (lighthouseEnabled && lighthouseHash) {
+        setLoading('Loading from Lighthouse...');
         lighthouseExperiences = await loadFromLighthouse();
+        console.log(`📦 Loaded ${lighthouseExperiences.length} experiences from Lighthouse`);
       }
 
-      // 2. Convert Lighthouse data to ExperienceInfo format
-      const created: ExperienceInfo[] = [];
+      // Step 2: Load recent experiences from blockchain (last 30 days)
+      setLoading('Checking recent blockchain activity...');
+      const factoryAddress = process.env.NEXT_PUBLIC_FACTORY_ADDRESS as `0x${string}`;
+      let recentExperiences: ExperienceInfo[] = [];
+      
+      if (factoryAddress) {
+        try {
+          recentExperiences = await loadCreatedExperiencesChunked(factoryAddress, account);
+          console.log(`🔗 Found ${recentExperiences.length} recent experiences from blockchain`);
+        } catch (err: any) {
+          console.warn('Recent blockchain query failed, using Lighthouse only:', err.message);
+        }
+      }
+
+      // Step 3: Merge Lighthouse and recent blockchain data
+      const allExperiences = new Map<string, ExperienceInfo>();
+      
+      // Add Lighthouse data first
+      setLoading('Converting Lighthouse data...');
       for (const lhExp of lighthouseExperiences) {
         try {
           const info = await getExperienceInfo(lhExp.address, account);
-          created.push(info);
+          allExperiences.set(lhExp.address.toLowerCase(), info);
         } catch (err) {
-          console.error('Failed to load Lighthouse experience:', lhExp.address, err);
+          console.warn(`Failed to load Lighthouse experience ${lhExp.address}:`, err);
+        }
+      }
+      
+      // Add/update with recent blockchain data
+      for (const recentExp of recentExperiences) {
+        allExperiences.set(recentExp.address.toLowerCase(), recentExp);
+      }
+
+      // Step 4: If still no data, check known experiences
+      if (allExperiences.size === 0) {
+        setLoading('Checking known experiences...');
+        const knownExperiences = await loadKnownExperiences();
+        for (const known of knownExperiences) {
+          allExperiences.set(known.address.toLowerCase(), known);
         }
       }
 
-      // 3. If no Lighthouse data, fall back to blockchain queries
-      if (created.length === 0) {
-        console.log('No Lighthouse data, querying blockchain...');
-        
-        const factoryAddress = process.env.NEXT_PUBLIC_FACTORY_ADDRESS as `0x${string}`;
-        if (factoryAddress) {
-          try {
-            const blockchainCreated = await loadCreatedExperiencesChunked(factoryAddress, account);
-            created.push(...blockchainCreated);
-            console.log(`Found ${blockchainCreated.length} created experiences from factory events`);
-            
-            // Sync new findings to Lighthouse
-            if (lighthouseEnabled && blockchainCreated.length > 0) {
-              setTimeout(() => syncExperiencesToLighthouse(), 1000);
-            }
-          } catch (err: any) {
-            console.error('Factory log query failed:', err);
-            console.log('Falling back to known experiences only');
-          }
-        }
-        
-        // 4. Also check known experiences as final fallback
-        await loadKnownExperiences();
-      }
-
+      const created = Array.from(allExperiences.values());
       setCreatedExperiences(created);
+      console.log(`✅ Total loaded: ${created.length} created experiences`);
+
+      // Step 5: Auto-sync new findings to Lighthouse (async)
+      if (lighthouseEnabled && recentExperiences.length > 0) {
+        setTimeout(async () => {
+          try {
+            console.log('🔄 Auto-syncing new experiences to Lighthouse...');
+            await syncExperiencesToLighthouse();
+          } catch (err) {
+            console.warn('Auto-sync to Lighthouse failed:', err);
+          }
+        }, 2000);
+      }
       
       // Always load known experiences to check for purchases
       await loadKnownExperiences();
@@ -136,8 +158,9 @@ export default function CreatorDashboard() {
       const latestBlock = await publicClient.getBlockNumber();
       const chunkSize = 10000n; // Smaller chunks to avoid RPC limits
       
-      // Start from the beginning to catch ALL deployments
-      const startBlock = 0n;
+      // Only search last 30 days to avoid timeout (about 30k blocks on Sepolia)
+      const blocksIn30Days = 30000n; // Approximate blocks in 30 days
+      const startBlock = latestBlock > blocksIn30Days ? latestBlock - blocksIn30Days : 0n;
       
       for (let fromBlock = startBlock; fromBlock <= latestBlock; fromBlock += chunkSize) {
         const toBlock = fromBlock + chunkSize - 1n > latestBlock ? latestBlock : fromBlock + chunkSize - 1n;
