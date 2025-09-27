@@ -4,6 +4,7 @@ import { createPublicClient, createWalletClient, custom, http, formatEther } fro
 import { sepolia } from 'viem/chains';
 import { getInjectedProvider } from '../../lib/provider';
 import ExperienceAbi from '../../abi/Experience.json';
+import { lighthouseService, isLighthouseAvailable, promptForApiKey, ExperienceIndex } from '../../lib/lighthouse';
 
 const publicClient = createPublicClient({
   chain: sepolia,
@@ -52,6 +53,11 @@ export default function CreatorDashboard() {
   // Manual experience addition
   const [showAddExperience, setShowAddExperience] = useState<boolean>(false);
   const [manualAddress, setManualAddress] = useState<string>('');
+  
+  // Lighthouse integration
+  const [lighthouseHash, setLighthouseHash] = useState<string>('');
+  const [showLighthouseSetup, setShowLighthouseSetup] = useState<boolean>(false);
+  const [lighthouseEnabled, setLighthouseEnabled] = useState<boolean>(false);
 
   async function connectWallet() {
     try {
@@ -127,27 +133,51 @@ export default function CreatorDashboard() {
     try {
       setLoading('Loading experiences...');
       
-      const factoryAddress = process.env.NEXT_PUBLIC_FACTORY_ADDRESS as `0x${string}`;
-      if (!factoryAddress) {
-        console.log('No factory address configured, using known experiences');
-        await loadKnownExperiences();
-        return;
+      // 1. Try loading from Lighthouse first (fastest)
+      let lighthouseExperiences: ExperienceIndex[] = [];
+      if (lighthouseEnabled && lighthouseHash) {
+        lighthouseExperiences = await loadFromLighthouse();
       }
 
-      // Try to get creation events with chunked approach to avoid RPC limits
-      let created: ExperienceInfo[] = [];
-      try {
-        created = await loadCreatedExperiencesChunked(factoryAddress, account);
-        console.log(`Found ${created.length} created experiences from factory events`);
-      } catch (err: any) {
-        console.error('Factory log query failed:', err);
-        console.log('Falling back to known experiences only');
-        // Don't show error to user for factory failures, just use fallback
+      // 2. Convert Lighthouse data to ExperienceInfo format
+      const created: ExperienceInfo[] = [];
+      for (const lhExp of lighthouseExperiences) {
+        try {
+          const info = await getExperienceInfo(lhExp.address, account);
+          created.push(info);
+        } catch (err) {
+          console.error('Failed to load Lighthouse experience:', lhExp.address, err);
+        }
+      }
+
+      // 3. If no Lighthouse data, fall back to blockchain queries
+      if (created.length === 0) {
+        console.log('No Lighthouse data, querying blockchain...');
+        
+        const factoryAddress = process.env.NEXT_PUBLIC_FACTORY_ADDRESS as `0x${string}`;
+        if (factoryAddress) {
+          try {
+            const blockchainCreated = await loadCreatedExperiencesChunked(factoryAddress, account);
+            created.push(...blockchainCreated);
+            console.log(`Found ${blockchainCreated.length} created experiences from factory events`);
+            
+            // Sync new findings to Lighthouse
+            if (lighthouseEnabled && blockchainCreated.length > 0) {
+              setTimeout(() => syncExperiencesToLighthouse(), 1000);
+            }
+          } catch (err: any) {
+            console.error('Factory log query failed:', err);
+            console.log('Falling back to known experiences only');
+          }
+        }
+        
+        // 4. Also check known experiences as final fallback
+        await loadKnownExperiences();
       }
 
       setCreatedExperiences(created);
       
-      // Also load known experiences to check for purchases
+      // Always load known experiences to check for purchases
       await loadKnownExperiences();
       
     } catch (err: any) {
@@ -396,6 +426,8 @@ export default function CreatorDashboard() {
       
       if (info.isCreator) {
         setCreatedExperiences(prev => [...prev, info]);
+        // Sync to Lighthouse
+        await addExperienceToLighthouse(info);
       } else if (info.isOwned) {
         setPurchasedExperiences(prev => [...prev, info]);
       } else {
@@ -415,9 +447,112 @@ export default function CreatorDashboard() {
 
   useEffect(() => {
     if (account && !isWrongNetwork) {
+      checkLighthouseSetup();
       loadExperiences();
     }
   }, [account, isWrongNetwork]);
+
+  async function checkLighthouseSetup() {
+    if (!account) return;
+    
+    const enabled = isLighthouseAvailable();
+    setLighthouseEnabled(enabled);
+    
+    if (enabled) {
+      // Load existing hash from localStorage
+      const hash = lighthouseService.loadHashFromLocalStorage(account);
+      if (hash) {
+        setLighthouseHash(hash);
+        console.log('Found existing Lighthouse hash:', hash);
+      }
+    }
+  }
+
+  async function setupLighthouse() {
+    const apiKey = promptForApiKey();
+    if (apiKey) {
+      setLighthouseEnabled(true);
+      setShowLighthouseSetup(false);
+      
+      // Try to sync current experiences to Lighthouse
+      if (createdExperiences.length > 0) {
+        await syncExperiencesToLighthouse();
+      }
+    }
+  }
+
+  async function loadFromLighthouse(): Promise<ExperienceIndex[]> {
+    if (!lighthouseEnabled || !lighthouseHash || !account) {
+      return [];
+    }
+
+    try {
+      setLoading('Loading from Lighthouse...');
+      const data = await lighthouseService.loadCreatorExperienceList(lighthouseHash);
+      
+      console.log(`Loaded ${data.experiences.length} experiences from Lighthouse`);
+      return data.experiences || [];
+    } catch (error: any) {
+      console.error('Failed to load from Lighthouse:', error);
+      // Don't show error to user for Lighthouse failures
+      return [];
+    }
+  }
+
+  async function syncExperiencesToLighthouse() {
+    if (!lighthouseEnabled || !account) return;
+
+    try {
+      const experienceIndexes: ExperienceIndex[] = createdExperiences.map(exp => ({
+        address: exp.address,
+        creator: exp.owner,
+        cid: exp.cid,
+        createdAt: Date.now(), // We don't have the actual creation time, use current
+        metadata: {
+          priceEth: formatEther(exp.priceEthWei)
+        }
+      }));
+
+      const hash = await lighthouseService.saveCreatorExperienceList(account, experienceIndexes);
+      setLighthouseHash(hash);
+      lighthouseService.saveHashToLocalStorage(account, hash);
+      
+      console.log('Synced experiences to Lighthouse:', hash);
+    } catch (error: any) {
+      console.error('Failed to sync to Lighthouse:', error);
+      setError('Failed to sync to Lighthouse: ' + error.message);
+    }
+  }
+
+  async function addExperienceToLighthouse(experienceInfo: ExperienceInfo) {
+    if (!lighthouseEnabled || !account) return;
+
+    try {
+      const experienceIndex: ExperienceIndex = {
+        address: experienceInfo.address,
+        creator: experienceInfo.owner,
+        cid: experienceInfo.cid,
+        createdAt: Date.now(),
+        metadata: {
+          priceEth: formatEther(experienceInfo.priceEthWei)
+        }
+      };
+
+      const hash = await lighthouseService.addExperienceToList(
+        account, 
+        experienceIndex, 
+        lighthouseHash || undefined
+      );
+      
+      setLighthouseHash(hash);
+      lighthouseService.saveHashToLocalStorage(account, hash);
+      
+      console.log('Added experience to Lighthouse:', hash);
+    } catch (error: any) {
+      console.error('Failed to add to Lighthouse:', error);
+      // Don't break the flow for Lighthouse errors
+    }
+  }
 
   const renderExperienceCard = (exp: ExperienceInfo, showEditOptions: boolean = false) => (
     <div key={exp.address} style={{
@@ -757,25 +892,84 @@ export default function CreatorDashboard() {
             }}>
               {activeTab === 'created' ? (
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <h2 style={{ margin: 0, color: '#1e293b' }}>
-                      Your Created Experiences
-                    </h2>
-                    <button
-                      onClick={() => setShowAddExperience(true)}
-                      style={{
-                        padding: '8px 16px',
-                        backgroundColor: '#6366f1',
-                        color: 'white',
-                        border: 'none',
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <h2 style={{ margin: 0, color: '#1e293b' }}>
+                        Your Created Experiences
+                      </h2>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {!lighthouseEnabled && (
+                          <button
+                            onClick={() => setShowLighthouseSetup(true)}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: '#f59e0b',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              fontWeight: '500',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            ☁️ Enable Sync
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setShowAddExperience(true)}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: '#6366f1',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          + Add Experience
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Lighthouse Status */}
+                    {lighthouseEnabled && (
+                      <div style={{
+                        padding: '8px 12px',
+                        backgroundColor: '#f0fdf4',
+                        border: '1px solid #bbf7d0',
                         borderRadius: '6px',
-                        fontSize: '14px',
-                        fontWeight: '500',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      + Add Experience
-                    </button>
+                        fontSize: '12px',
+                        color: '#166534',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}>
+                        <span>☁️ Lighthouse sync enabled</span>
+                        {lighthouseHash && (
+                          <span style={{ fontFamily: 'monospace', fontSize: '10px' }}>
+                            ({lighthouseHash.slice(0, 8)}...)
+                          </span>
+                        )}
+                        <button
+                          onClick={syncExperiencesToLighthouse}
+                          disabled={loading !== ''}
+                          style={{
+                            marginLeft: 'auto',
+                            padding: '2px 6px',
+                            backgroundColor: '#10b981',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Sync Now
+                        </button>
+                      </div>
+                    )}
                   </div>
                   
                   {createdExperiences.length === 0 ? (
@@ -847,6 +1041,103 @@ export default function CreatorDashboard() {
               )}
             </div>
           </>
+        )}
+
+        {/* Lighthouse Setup Modal */}
+        {showLighthouseSetup && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }}>
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '24px',
+              maxWidth: '500px',
+              width: '100%'
+            }}>
+              <h3 style={{ margin: '0 0 16px 0', color: '#1e293b' }}>
+                ☁️ Enable Lighthouse Sync
+              </h3>
+              <p style={{ margin: '0 0 20px 0', color: '#6b7280', lineHeight: '1.5' }}>
+                Lighthouse allows you to sync your experience list across devices using decentralized storage. 
+                Your data is stored on IPFS and accessible from any device.
+              </p>
+              
+              <div style={{
+                padding: '16px',
+                backgroundColor: '#f0fdf4',
+                border: '1px solid #bbf7d0',
+                borderRadius: '8px',
+                marginBottom: '20px'
+              }}>
+                <h4 style={{ margin: '0 0 8px 0', color: '#15803d', fontSize: '14px' }}>Benefits:</h4>
+                <ul style={{ margin: 0, paddingLeft: '20px', color: '#166534', fontSize: '14px' }}>
+                  <li>Access your experiences from any device</li>
+                  <li>Reduce blockchain queries (faster loading)</li>
+                  <li>Decentralized backup of your experience list</li>
+                  <li>Share experience lists with others</li>
+                </ul>
+              </div>
+
+              <div style={{
+                padding: '16px',
+                backgroundColor: '#fef3c7',
+                border: '1px solid #fcd34d',
+                borderRadius: '8px',
+                marginBottom: '20px',
+                fontSize: '14px',
+                color: '#92400e'
+              }}>
+                <strong>Get your free API key:</strong><br />
+                1. Visit <a href="https://www.lighthouse.storage/" target="_blank" rel="noopener noreferrer" style={{ color: '#92400e', textDecoration: 'underline' }}>lighthouse.storage</a><br />
+                2. Sign up for a free account<br />
+                3. Copy your API key and paste below
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={setupLighthouse}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    backgroundColor: '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: '500',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Setup Lighthouse
+                </button>
+                
+                <button
+                  onClick={() => setShowLighthouseSetup(false)}
+                  style={{
+                    padding: '12px 16px',
+                    backgroundColor: '#6b7280',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: '500',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Maybe Later
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Add Experience Modal */}

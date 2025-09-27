@@ -348,7 +348,7 @@ export default function BuyPage({ params }: { params: { address: string } }) {
               🌍 Create New
             </a>
           </div>
-          </div>
+            </div>
 
         {/* Wallet Status */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
