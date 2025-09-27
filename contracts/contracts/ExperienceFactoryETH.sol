@@ -3,13 +3,20 @@ pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
-import {Experience} from "./Experience.sol";
+import {ExperienceETH} from "./ExperienceETH.sol";
 
-contract ExperienceFactory is Ownable2Step {
+contract ExperienceFactoryETH is Ownable2Step {
     address public immutable PLATFORM_WALLET;
     uint16  public immutable PLATFORM_FEE_BPS;
 
-    event ExperienceCreated(address indexed creator, address experience, string cidInitial);
+    event ExperienceCreated(
+        address indexed creator, 
+        address experience, 
+        string cidInitial, 
+        address flowSyncAuthority, 
+        uint16 proposerFeeBps,
+        uint256 pricePerPass
+    );
 
     constructor(address platformWallet, uint16 platformFeeBps) Ownable(msg.sender) {
         require(platformWallet != address(0), "platform=0");
@@ -22,21 +29,26 @@ contract ExperienceFactory is Ownable2Step {
         address creator,
         string calldata cidInitial,
         address flowSyncAuthority,
-        uint16 proposerFeeBps // default 1000 suggested
+        uint16 proposerFeeBps, // default 1000 suggested
+        uint256 pricePerPass   // price in wei (e.g., 0.01 ETH = 10000000000000000)
     ) external returns (address experience) {
-        // Use default 1000 if 0 provided
-        uint16 actualProposerFeeBps = proposerFeeBps == 0 ? 1000 : proposerFeeBps;
-        
-        Experience exp = new Experience(
+        ExperienceETH exp = new ExperienceETH(
             creator,
             cidInitial,
             flowSyncAuthority,
             PLATFORM_WALLET,
             PLATFORM_FEE_BPS,
-            actualProposerFeeBps
+            pricePerPass
         );
         
-        emit ExperienceCreated(creator, address(exp), cidInitial);
+        emit ExperienceCreated(
+            creator, 
+            address(exp), 
+            cidInitial, 
+            flowSyncAuthority, 
+            proposerFeeBps,
+            pricePerPass
+        );
         return address(exp);
     }
 }

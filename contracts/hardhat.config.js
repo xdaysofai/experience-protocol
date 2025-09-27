@@ -15,11 +15,11 @@ const config = {
   networks: {
     amoy: {
       url: AMOY,
-      accounts: PK ? [`0x${PK}`] : []
+      accounts: PK ? [PK.startsWith('0x') ? PK : `0x${PK}`] : []
     },
     sepolia: {
       url: SEPOLIA,
-      accounts: PK ? [PK] : []
+      accounts: PK ? [PK.startsWith('0x') ? PK : `0x${PK}`] : []
     }
   }
 };

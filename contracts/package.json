@@ -5,10 +5,8 @@
   "scripts": {
     "build": "hardhat compile",
     "run": "node --env-file=../.env",
-    "deploy:amoy": "hardhat run scripts/deploy-amoy.js --network amoy",
     "deploy:sepolia": "node --env-file=../.env ../node_modules/.bin/hardhat run scripts/deploy-sepolia.js --network sepolia",
-    "cfg:set-prices:amoy": "node --env-file=../.env scripts/cfg-set-prices-amoy.js",
-    "cfg:set-prices:sepolia": "hardhat run scripts/cfg-set-prices-sepolia.js --network sepolia"
+    "cfg:set-price:sepolia": "node --env-file=../.env scripts/cfg-set-price-sepolia.js"
   },
   "dependencies": {
     "@nomicfoundation/hardhat-ethers": "3.0.8",
@@ -16,5 +14,9 @@
     "dotenv": "16.4.5",
     "ethers": "6.13.2",
     "hardhat": "2.22.12"
+  },
+  "devDependencies": {
+    "chai": "^4.3.10",
+    "mocha": "^10.2.0"
   }
 }

@@ -1,0 +1,140 @@
+{
+  "abi": [
+    {
+      "type": "constructor",
+    "inputs": [
+      {"name": "_creator", "type": "address"},
+      {"name": "cidInitial", "type": "string"},
+      {"name": "_flowSyncAuthority", "type": "address"},
+      {"name": "_platformWallet", "type": "address"},
+      {"name": "_platformFeeBps", "type": "uint16"},
+      {"name": "_proposerFeeBps", "type": "uint16"}
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "buyWithEth",
+    "inputs": [{"name": "qty", "type": "uint256"}],
+    "outputs": [],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "setPriceEthWei",
+    "inputs": [{"name": "_priceEthWei", "type": "uint256"}],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setCurrentProposer",
+    "inputs": [{"name": "proposer", "type": "address"}],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setCid",
+    "inputs": [{"name": "newCid", "type": "string"}],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "cid",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "string"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "priceEthWei",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "currentProposer",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "address"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "owner",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "address"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "creator",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "address"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "PLATFORM_WALLET",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "address"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "PLATFORM_FEE_BPS",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "uint16"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "balanceOf",
+    "inputs": [
+      {"name": "account", "type": "address"},
+      {"name": "id", "type": "uint256"}
+    ],
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "Bought",
+    "inputs": [
+      {"name": "buyer", "type": "address", "indexed": true},
+      {"name": "qty", "type": "uint256", "indexed": false},
+      {"name": "paid", "type": "uint256", "indexed": false}
+    ]
+  },
+  {
+    "type": "event",
+    "name": "PriceUpdated",
+    "inputs": [
+      {"name": "oldPrice", "type": "uint256", "indexed": false},
+      {"name": "newPrice", "type": "uint256", "indexed": false}
+    ]
+  },
+  {
+    "type": "error",
+    "name": "TransfersDisabled",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidPrice",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidQuantity",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InsufficientPayment",
+    "inputs": []
+  }
+  ]
+}

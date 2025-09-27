@@ -1,466 +1,561 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { createPublicClient, createWalletClient, custom, http, parseUnits, formatUnits } from "viem";
-import { sepolia } from "viem/chains";
-import Header from '../../../../components/Header';
-import Footer from '../../../../components/Footer';
-import Loading from '../../../../components/Loading';
+import { useState, useEffect } from 'react';
+import { createPublicClient, createWalletClient, custom, http, formatEther } from 'viem';
+import { sepolia } from 'viem/chains';
+import ExperienceAbi from '../../../../abi/Experience.json';
+import { getInjectedProvider } from '../../../../lib/provider';
 
-const PASS_ID = 1n;
+const publicClient = createPublicClient({
+  chain: sepolia,
+  transport: http(process.env.NEXT_PUBLIC_RPC || 'https://rpc.sepolia.org'),
+});
 
-const erc20Abi = [
-  { "type":"function","name":"decimals","stateMutability":"view","inputs":[],"outputs":[{"type":"uint8"}]},
-  { "type":"function","name":"approve","stateMutability":"nonpayable","inputs":[{"name":"spender","type":"address"},{"name":"amount","type":"uint256"}],"outputs":[{"type":"bool"}] },
-  { "type":"function","name":"allowance","stateMutability":"view","inputs":[{"name":"owner","type":"address"},{"name":"spender","type":"address"}],"outputs":[{"type":"uint256"}]}
-] as const;
+async function buyWithEth({
+  experience, qty, priceEthWei,
+}: { experience: `0x${string}`, qty: bigint, priceEthWei: bigint }) {
+  const provider = await getInjectedProvider();
+  const [account] = await provider.request({ method: 'eth_requestAccounts' });
+  const walletClient = createWalletClient({ chain: sepolia, transport: custom(provider) });
+  const value = priceEthWei * qty;
+  
+  const { request } = await publicClient.simulateContract({
+    address: experience,
+    abi: ExperienceAbi.abi,
+    functionName: 'buyWithEth',
+    args: [qty],
+    account,
+    value,
+  });
+  return walletClient.writeContract(request);
+}
 
-const expAbi = [
-  { "type":"function","name":"allowedToken","stateMutability":"view","inputs":[{"type":"address"}],"outputs":[{"type":"bool"}]},
-  { "type":"function","name":"priceByToken","stateMutability":"view","inputs":[{"type":"address"}],"outputs":[{"type":"uint256"}]},
-  { "type":"function","name":"buyWithToken","stateMutability":"nonpayable","inputs":[{"type":"address"},{"type":"uint256"}],"outputs":[]},
-  { "type":"function","name":"cid","stateMutability":"view","inputs":[],"outputs":[{"type":"string"}]}
-] as const;
-
-export default function BuyPage({ params }: { params: { address: `0x${string}` } }) {
-  const exp = params.address;
-  const chain = sepolia;
-
-  const TOKENS = useMemo(() => {
-    return [
-      { sym: "USDC", addr: process.env.NEXT_PUBLIC_USDC_SEPOLIA as `0x${string}` | undefined },
-      { sym: "DAI",  addr: process.env.NEXT_PUBLIC_DAI_SEPOLIA  as `0x${string}` | undefined },
-      { sym: "WETH", addr: process.env.NEXT_PUBLIC_WETH_SEPOLIA as `0x${string}` | undefined }
-    ].filter(t => !!t.addr) as {sym:string,addr:`0x${string}`}[];
-  }, []);
-
-  const [selected, setSelected] = useState<string>(TOKENS[0]?.addr || "");
-  const [price, setPrice] = useState<bigint | null>(null);
-  const [decimals, setDecimals] = useState<number>(18);
-  const [qty, setQty] = useState<number>(1);
-  const [status, setStatus] = useState<string>("");
-  const [loading, setLoading] = useState<string>("");
-  const [error, setError] = useState<string>("");
-  const [success, setSuccess] = useState<string>("");
-  const [needsApproval, setNeedsApproval] = useState<boolean>(false);
-
-  const pub = useMemo(()=> createPublicClient({ chain, transport: http() }), []);
+export default function BuyPage({ params }: { params: { address: string } }) {
+  const experience = params.address as `0x${string}`;
   const [wallet, setWallet] = useState<ReturnType<typeof createWalletClient> | null>(null);
-  const [account, setAccount] = useState<`0x${string}` | undefined>();
+  const [account, setAccount] = useState<string>('');
+  const [priceEthWei, setPriceEthWei] = useState<bigint>(0n);
+  const [cid, setCid] = useState<string>('');
+  const [currentProposer, setCurrentProposer] = useState<string>('');
+  const [owner, setOwner] = useState<string>('');
+  const [qty, setQty] = useState<number>(1);
+  const [loading, setLoading] = useState<string>('');
+  const [txHash, setTxHash] = useState<string>('');
+  const [error, setError] = useState<string>('');
+  const [passBalance, setPassBalance] = useState<bigint>(0n);
+  const [showContent, setShowContent] = useState<boolean>(false);
+  const [isWrongNetwork, setIsWrongNetwork] = useState<boolean>(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && (window as any).ethereum) {
-      console.log("Ethereum provider detected on page load");
-      console.log("Provider details:", {
-        isMetaMask: (window as any).ethereum.isMetaMask,
-        isConnected: (window as any).ethereum.isConnected?.(),
-        chainId: (window as any).ethereum.chainId,
-        selectedAddress: (window as any).ethereum.selectedAddress,
-        providers: (window as any).ethereum.providers?.length || 'single provider'
-      });
-      
-      const w = createWalletClient({ chain, transport: custom((window as any).ethereum) });
-      setWallet(w);
-    } else {
-      console.log("No Ethereum provider found on page load");
-    }
-  }, []);
+    loadContractData();
+  }, [experience]);
 
-  async function connectWallet() {
-    console.log("Connect wallet button clicked!"); // Debug log
+  useEffect(() => {
+    if (account) {
+      checkPassBalance();
+    }
+  }, [account, experience]);
+
+  async function checkPassBalance() {
+    if (!account) return;
     
-    if (typeof window === "undefined") {
-      console.log("Window is undefined");
-      return setError("Browser environment not detected.");
-    }
-
-    // Check for multiple wallet providers
-    const ethereum = (window as any).ethereum;
-    if (!ethereum) {
-      console.log("No Ethereum provider found");
-      return setError("MetaMask not detected. Please install MetaMask browser extension.");
-    }
-
     try {
-      setLoading("Connecting wallet...");
-      setError("");
-      setSuccess("");
+      const balance = await publicClient.readContract({
+        address: experience,
+        abi: ExperienceAbi.abi,
+        functionName: 'balanceOf',
+        args: [account as `0x${string}`, 1n], // PASS_ID = 1
+      }) as bigint;
       
-      // If there are multiple wallets, try to select MetaMask specifically
-      if (ethereum.providers?.length) {
-        console.log(`Multiple providers detected (${ethereum.providers.length}), selecting MetaMask...`);
-        console.log("Available providers:", ethereum.providers.map((p: any, index: number) => ({
-          index,
-          isMetaMask: p.isMetaMask,
-          isCoinbaseWallet: p.isCoinbaseWallet,
-          isRabby: p.isRabby,
-          selectedProvider: p.selectedProvider,
-          _metamask: !!p._metamask,
-          constructor: p.constructor?.name,
-          networkVersion: p.networkVersion
-        })));
-        
-        // More robust MetaMask detection - look for the real MetaMask provider
-        const metamaskProvider = ethereum.providers.find((provider: any) => {
-          // MetaMask has these specific properties that Coinbase doesn't
-          return provider.isMetaMask && 
-                 !provider.isCoinbaseWallet && 
-                 !provider.selectedProvider &&
-                 (provider._metamask || provider.request);
-        }) || ethereum.providers.find((provider: any) => provider.isMetaMask);
-        
-        if (metamaskProvider) {
-          console.log("Found MetaMask provider, requesting accounts...");
-          
-          // Use MetaMask specifically
-          const accounts = await metamaskProvider.request({ 
-            method: "eth_requestAccounts" 
-          });
-          
-          console.log("MetaMask accounts received:", accounts);
-          
-          if (accounts.length === 0) {
-            throw new Error("No accounts found. Please unlock MetaMask.");
-          }
+      setPassBalance(balance);
+      console.log(`User has ${balance.toString()} passes`);
+    } catch (err) {
+      console.error('Failed to check pass balance:', err);
+    }
+  }
 
-          const account = accounts[0];
-          setAccount(account);
-          console.log("Account set:", account);
-          
-          // Create wallet client with MetaMask provider
-          const w = createWalletClient({ 
-            chain, 
-            transport: custom(metamaskProvider) 
+  async function loadContractData() {
+    try {
+        const [price, cidData, proposer, ownerData] = await Promise.all([
+        publicClient.readContract({
+          address: experience,
+          abi: ExperienceAbi.abi,
+          functionName: 'priceEthWei',
+        }),
+        publicClient.readContract({
+          address: experience,
+          abi: ExperienceAbi.abi,
+          functionName: 'cid',
+        }),
+        publicClient.readContract({
+          address: experience,
+          abi: ExperienceAbi.abi,
+          functionName: 'currentProposer',
+        }),
+        publicClient.readContract({
+          address: experience,
+          abi: ExperienceAbi.abi,
+          functionName: 'owner',
+        }),
+      ]);
+
+      setPriceEthWei(price as bigint);
+      setCid(cidData as string);
+      setCurrentProposer(proposer as string);
+      setOwner(ownerData as string);
+    } catch (err) {
+      console.error('Failed to load contract data:', err);
+      setError('Failed to load contract data');
+    }
+  }
+
+  async function switchToSepolia() {
+    try {
+      const provider = await getInjectedProvider();
+      await provider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0xaa36a7' }], // Sepolia chain ID in hex
+      });
+      setIsWrongNetwork(false);
+      setError('');
+      return true;
+    } catch (error: any) {
+      if (error.code === 4902) {
+        // Chain not added to wallet
+        try {
+          await provider.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0xaa36a7',
+              chainName: 'Sepolia',
+              nativeCurrency: {
+                name: 'ETH',
+                symbol: 'ETH',
+                decimals: 18,
+              },
+              rpcUrls: ['https://ethereum-sepolia-rpc.publicnode.com'],
+              blockExplorerUrls: ['https://sepolia.etherscan.io'],
+            }],
           });
-          setWallet(w);
-          console.log("Wallet client created with MetaMask provider");
-        } else {
-          throw new Error("MetaMask not found among wallet providers. Please disable other wallet extensions or try the fallback method.");
+          setIsWrongNetwork(false);
+          setError('');
+          return true;
+        } catch (addError) {
+          console.error('Failed to add Sepolia network:', addError);
+          setError('Failed to add Sepolia network to wallet');
+          return false;
         }
       } else {
-        // Single provider (likely MetaMask)
-        console.log("Single provider detected, requesting accounts...");
-        
-        const accounts = await ethereum.request({ 
-          method: "eth_requestAccounts" 
-        });
-        
-        console.log("Accounts received:", accounts);
-        
-        if (accounts.length === 0) {
-          throw new Error("No accounts found. Please unlock MetaMask.");
-        }
-
-        const account = accounts[0];
-        setAccount(account);
-        console.log("Account set:", account);
-        
-        // Create wallet client
-        const w = createWalletClient({ 
-          chain, 
-          transport: custom(ethereum) 
-        });
-        setWallet(w);
-        console.log("Wallet client created");
+        console.error('Failed to switch to Sepolia:', error);
+        setError('Failed to switch to Sepolia network');
+        return false;
       }
-      
-      setSuccess("Wallet connected successfully!");
-      setTimeout(() => setSuccess(""), 3000);
-      
-    } catch (error: any) {
-      console.error("Wallet connection error:", error);
-      
-      // Handle specific error types
-      let errorMessage = "Failed to connect wallet";
-      
-      if (error.code === 4001) {
-        errorMessage = "Connection rejected by user";
-      } else if (error.code === -32002) {
-        errorMessage = "Connection request already pending. Please check MetaMask.";
-      } else if (error.message?.includes("User rejected")) {
-        errorMessage = "Connection rejected by user";
-      } else if (error.message?.includes("already pending")) {
-        errorMessage = "Connection already in progress. Please check MetaMask.";
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      setError(errorMessage);
-    } finally {
-      setLoading("");
     }
   }
 
-  useEffect(() => {
-    (async () => {
-      if (!selected) return;
-      try {
-        const allowed = await pub.readContract({ address: exp, abi: expAbi, functionName: "allowedToken", args: [selected as `0x${string}`] });
-        const p = await pub.readContract({ address: exp, abi: expAbi, functionName: "priceByToken", args: [selected as `0x${string}`] }) as bigint;
-        setPrice(allowed ? p : 0n);
-        try {
-          const dec = await pub.readContract({ address: selected as `0x${string}`, abi: erc20Abi, functionName: "decimals" }) as number;
-          setDecimals(dec);
-        } catch {
-          setDecimals(18); // fallback
-        }
-      } catch (error) {
-        setError("Error reading contract: " + (error as Error).message);
-        setPrice(0n);
-      }
-    })();
-  }, [selected, exp]);
-
-  const total = price ? price * BigInt(qty) : 0n;
-
-  // Check if approval is needed
-  useEffect(() => {
-    (async () => {
-      if (!wallet || !account || !selected || !price) return;
-      try {
-        const allowance = await pub.readContract({
-          address: selected as `0x${string}`, abi: erc20Abi, functionName: "allowance", args: [account, exp]
-        }) as bigint;
-        setNeedsApproval(allowance < total);
-      } catch (error) {
-        console.error("Error checking allowance:", error);
-      }
-    })();
-  }, [wallet, account, selected, price, total]);
-
-  async function approveToken() {
-    if (!wallet || !account || !selected) return;
-    try {
-      setLoading("Approving token...");
-      const hashA = await wallet.writeContract({
-        address: selected as `0x${string}`, abi: erc20Abi, functionName: "approve", args: [exp, total], chain, account
-      });
-      await pub.waitForTransactionReceipt({ hash: hashA });
-      setSuccess("Token approved successfully!");
-      setNeedsApproval(false);
-    } catch (error) {
-      setError("Failed to approve token: " + (error as Error).message);
-    } finally {
-      setLoading("");
-    }
-  }
-
-  async function buyAccess() {
-    if (!wallet || !account) return setError("Connect wallet");
-    if (!selected || !price || price === 0n) return setError("Token not allowed or price=0");
+  async function connectWallet() {
+    console.log('🔄 Starting wallet connection...');
     
     try {
-      setLoading("Purchasing access...");
-      const hashB = await wallet.writeContract({
-        address: exp, abi: expAbi, functionName: "buyWithToken", args: [selected as `0x${string}`, BigInt(qty)], chain, account
+      setLoading('Connecting...');
+      setError('');
+      
+      // Check if MetaMask is available
+      if (typeof window === 'undefined') {
+        throw new Error('Window not available');
+      }
+      
+      console.log('🌐 Getting provider...');
+      const provider = await getInjectedProvider();
+      
+      if (!provider) {
+        throw new Error('No wallet provider found. Please install MetaMask.');
+      }
+      
+      console.log('📱 Provider found, requesting accounts...');
+      
+      // Request accounts with better error handling
+      const accounts = await provider.request({ 
+        method: 'eth_requestAccounts' 
+      }).catch((error: any) => {
+        if (error.code === 4001) {
+          throw new Error('User rejected wallet connection');
+        }
+        throw error;
       });
-      await pub.waitForTransactionReceipt({ hash: hashB });
-      setSuccess("Access purchased successfully! Transaction: " + hashB);
-    } catch (error) {
-      setError("Failed to purchase access: " + (error as Error).message);
+      
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts found in wallet');
+      }
+      
+      console.log('✅ Accounts received:', accounts);
+      
+      // Check current chain
+      const chainId = await provider.request({ method: 'eth_chainId' });
+      console.log('🔗 Current chain ID:', chainId);
+      
+      setAccount(accounts[0]);
+      console.log('👤 Account set:', accounts[0]);
+      
+      const walletClient = createWalletClient({ 
+        chain: sepolia, 
+        transport: custom(provider) 
+      });
+      setWallet(walletClient);
+      console.log('🎯 Wallet client created');
+      
+      const wrongNetwork = chainId !== '0xaa36a7';
+      setIsWrongNetwork(wrongNetwork);
+      
+      if (wrongNetwork) {
+        setError('⚠️ Wrong network! Please click "Switch to Sepolia" button above.');
+      } else {
+        setError('');
+        console.log('✅ Connected to Sepolia successfully!');
+      }
+      
+    } catch (err: any) {
+      console.error('❌ Wallet connection failed:', err);
+      setError('Connection failed: ' + (err.message || 'Unknown error'));
     } finally {
-      setLoading("");
+      setLoading('');
     }
   }
 
-  const selectedToken = TOKENS.find(t => t.addr === selected);
-  const formattedPrice = price ? formatUnits(price, decimals) : "0";
-  const formattedTotal = formatUnits(total, decimals);
+  async function handleBuy() {
+    if (!account || !wallet) {
+      setError('Please connect your wallet first');
+      return;
+    }
+    
+    setLoading('Purchasing...');
+    setError('');
+    setTxHash('');
+    
+    try {
+      const value = priceEthWei * BigInt(qty);
+      
+      const { request } = await publicClient.simulateContract({
+        address: experience,
+        abi: ExperienceAbi.abi,
+        functionName: 'buyWithEth',
+        args: [BigInt(qty)],
+        account: account as `0x${string}`,
+        value,
+      });
+      
+      const hash = await wallet.writeContract(request);
+      setTxHash(hash);
+      
+      // Wait for receipt
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      console.log('Transaction confirmed:', receipt);
+      
+      // Refresh pass balance after purchase
+      await checkPassBalance();
+    } catch (err: any) {
+      console.error('Buy failed:', err);
+      
+      // Check for chain mismatch error
+      if (err.message?.includes('chain') || err.message?.includes('Chain')) {
+        setError('❌ Wrong network! Please switch to Sepolia (Chain ID: 11155111)');
+      } else if (err.message?.includes('insufficient funds')) {
+        setError('❌ Insufficient ETH balance');
+      } else if (err.message?.includes('User rejected')) {
+        setError('❌ Transaction rejected by user');
+      } else {
+        setError('❌ ' + (err.message || 'Transaction failed'));
+      }
+    } finally {
+      setLoading('');
+    }
+  }
+
+  const totalCost = priceEthWei * BigInt(qty);
+
+  function disconnectWallet() {
+    setAccount('');
+    setWallet(null);
+    setError('');
+    setSuccess('');
+    setTxHash('');
+  }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      <Header 
-        account={account} 
-        onConnectWallet={connectWallet} 
-        experienceAddress={exp}
-      />
-      
-      <main className="flex-1 py-12">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div style={{ 
+      minHeight: '100vh', 
+      backgroundColor: '#f8fafc', 
+      padding: '20px',
+      fontFamily: 'system-ui, -apple-system, sans-serif'
+    }}>
           {/* Header */}
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">Buy Access Pass</h1>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Purchase a soulbound NFT pass to gain access to this experience. 
-              Payments are automatically split between creators and the platform.
-            </p>
+      <div style={{ 
+        maxWidth: '1200px', 
+        margin: '0 auto', 
+        marginBottom: '30px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '20px',
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <h1 style={{ margin: 0, color: '#1e293b', fontSize: '24px', fontWeight: '600' }}>
+            🎫 Buy Experience Pass
+          </h1>
+          <a 
+            href="/experience"
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#6366f1',
+              color: 'white',
+              textDecoration: 'none',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '500'
+            }}
+          >
+            📊 My Dashboard
+          </a>
           </div>
 
-          {/* Status Messages */}
-          {loading && (
-            <div className="mb-6">
-              <Loading text={loading} />
-            </div>
-          )}
-          
-          {error && (
-            <div className="status-error mb-6">
-              <div className="flex items-center space-x-2">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-                <span>{error}</span>
+        {/* Wallet Status */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {account ? (
+            <>
+              <div style={{
+                padding: '8px 16px',
+                backgroundColor: '#10b981',
+                color: 'white',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '500'
+              }}>
+                🟢 {account.slice(0, 6)}...{account.slice(-4)}
               </div>
-            </div>
-          )}
-
-          {success && (
-            <div className="status-success mb-6">
-              <div className="flex items-center space-x-2">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-                <span>{success}</span>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Purchase Form */}
-            <div className="lg:col-span-2">
-              <div className="card">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Purchase Details</h2>
-
-                {!account ? (
-                  <div className="text-center py-12">
-                    <div className="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <svg className="w-10 h-10 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-4">Connect Your Wallet</h3>
-                    <p className="text-gray-600 mb-6">Connect your MetaMask wallet to purchase an access pass</p>
-                    <div className="space-y-3">
-                      <button onClick={connectWallet} className="btn-primary w-full">
-                        Connect MetaMask Wallet
-                      </button>
+              {isWrongNetwork && (
                       <button 
-                        onClick={async () => {
-                          console.log("Trying direct MetaMask connection...");
-                          try {
-                            setLoading("Connecting directly to MetaMask...");
-                            setError("");
-                            
-                            // Try accessing MetaMask directly through window.ethereum
-                            // First, try to request wallet_requestPermissions to force wallet selection
-                            try {
-                              await (window as any).ethereum.request({
-                                method: 'wallet_requestPermissions',
-                                params: [{ eth_accounts: {} }]
-                              });
-                            } catch (permErr: any) {
-                              console.log("Permission request failed, trying direct connection...");
-                            }
-                            
-                            // Then request accounts
-                            const accounts = await (window as any).ethereum.request({ 
-                              method: "eth_requestAccounts" 
-                            });
-                            
-                            console.log("Direct connection accounts:", accounts);
-                            
-                            if (accounts.length > 0) {
-                              setAccount(accounts[0]);
-                              const w = createWalletClient({ 
-                                chain, 
-                                transport: custom((window as any).ethereum) 
-                              });
-                              setWallet(w);
-                              setSuccess("MetaMask connected successfully!");
-                            }
-                          } catch (err: any) {
-                            console.error("Direct MetaMask connection error:", err);
-                            setError("Direct MetaMask connection failed: " + err.message);
-                          } finally {
-                            setLoading("");
-                          }
-                        }}
-                        className="btn-warning w-full text-sm"
-                      >
-                        Force MetaMask Connection
+                  onClick={switchToSepolia}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#f59e0b',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  📡 Switch to Sepolia
                       </button>
+              )}
                       <button 
-                        onClick={async () => {
-                          console.log("Switching to Sepolia network...");
-                          try {
-                            await (window as any).ethereum.request({
-                              method: 'wallet_switchEthereumChain',
-                              params: [{ chainId: '0xaa36a7' }], // Sepolia chain ID
-                            });
-                            setSuccess("Switched to Sepolia network!");
-                          } catch (err: any) {
-                            if (err.code === 4902) {
-                              setError("Sepolia network not found. Please add it to MetaMask manually.");
-                            } else {
-                              setError("Failed to switch network: " + err.message);
-                            }
-                          }
-                        }}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm w-full transition-colors"
-                      >
-                        Switch to Sepolia Network
+                onClick={disconnectWallet}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
+              >
+                Disconnect
                       </button>
+            </>
+          ) : (
                       <button 
                         onClick={() => {
-                          console.log("=== WALLET DEBUG INFO ===");
-                          console.log("window.ethereum:", (window as any).ethereum);
-                          console.log("Providers array:", (window as any).ethereum?.providers);
-                          if ((window as any).ethereum?.providers) {
-                            (window as any).ethereum.providers.forEach((p: any, i: number) => {
-                              console.log(`Provider ${i}:`, {
-                                isMetaMask: p.isMetaMask,
-                                isCoinbaseWallet: p.isCoinbaseWallet,
-                                _metamask: p._metamask,
-                                request: typeof p.request,
-                                selectedProvider: p.selectedProvider,
-                                constructor: p.constructor?.name,
-                                keys: Object.keys(p).slice(0, 10)
-                              });
-                            });
-                          }
-                          console.log("=== END DEBUG INFO ===");
-                        }}
-                        className="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg text-sm w-full transition-colors"
-                      >
-                        Debug Providers
+                console.log('Connect wallet button clicked!');
+                connectWallet();
+              }}
+              disabled={loading !== ''}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: loading !== '' ? '#9ca3af' : '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '16px',
+                cursor: loading !== '' ? 'not-allowed' : 'pointer',
+                fontWeight: '600',
+                zIndex: 10,
+                position: 'relative'
+              }}
+            >
+              {loading || 'Connect Wallet'}
                       </button>
+          )}
+        </div>
+      </div>
+
+      <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+        
+        {/* Left Column - Purchase */}
+        <div style={{ 
+          backgroundColor: 'white', 
+          padding: '30px', 
+          borderRadius: '12px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          height: 'fit-content'
+        }}>
+          <h2 style={{ marginTop: 0, color: '#1e293b', fontSize: '20px', fontWeight: '600', marginBottom: '20px' }}>
+            Purchase Details
+          </h2>
+
+          {!account ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>👛</div>
+              <h3 style={{ margin: '0 0 8px 0', color: '#1e293b' }}>Connect Your Wallet</h3>
+              <p style={{ margin: '0 0 20px 0' }}>Please connect your MetaMask wallet to purchase passes</p>
+              
+              {/* Debug/Alternative Connect Button */}
                       <button 
                         onClick={() => {
-                          setAccount(undefined);
-                          setWallet(null);
-                          setError("");
-                          setSuccess("");
-                          console.log("Wallet state reset");
-                        }}
-                        className="btn-secondary w-full text-sm"
-                      >
-                        Reset Connection
+                  console.log('Alternative connect button clicked!');
+                  alert('Button works! Connecting wallet...');
+                  connectWallet();
+                }}
+                style={{
+                  padding: '16px 32px',
+                  backgroundColor: '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '18px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                  transition: 'transform 0.2s, box-shadow 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(16, 185, 129, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
+                }}
+              >
+                🚀 Connect MetaMask Wallet
                       </button>
                     </div>
+          ) : passBalance > 0 ? (
+            /* Content Access Area */
+            <div>
+              <div style={{ 
+                padding: '20px', 
+                backgroundColor: '#f0fdf4', 
+                border: '2px solid #22c55e',
+                borderRadius: '12px',
+                marginBottom: '24px',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '48px', marginBottom: '12px' }}>🎉</div>
+                <h3 style={{ margin: '0 0 8px 0', color: '#15803d', fontSize: '20px' }}>
+                  Welcome to the Experience!
+                </h3>
+                <p style={{ margin: '0 0 16px 0', color: '#166534' }}>
+                  You own {passBalance.toString()} pass{passBalance > 1n ? 'es' : ''} and have access to exclusive content
+                </p>
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  backgroundColor: '#22c55e',
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600'
+                }}>
+                  ✅ Access Granted
+                </div>
+              </div>
+
+              {/* Content Display */}
+              <div style={{
+                padding: '24px',
+                backgroundColor: '#1e293b',
+                borderRadius: '12px',
+                color: 'white',
+                marginBottom: '24px'
+              }}>
+                <h4 style={{ margin: '0 0 16px 0', color: '#f1f5f9', fontSize: '18px' }}>
+                  🔒 Exclusive Experience Content
+                </h4>
+                
+                {/* CID Content */}
+                <div style={{
+                  padding: '16px',
+                  backgroundColor: '#334155',
+                  borderRadius: '8px',
+                  marginBottom: '16px'
+                }}>
+                  <div style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '8px' }}>
+                    Content ID:
                   </div>
-                ) : (
-                  <div className="space-y-6">
-                    {/* Token Selection */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Payment Token
-                      </label>
-                      <select
-                        value={selected}
-                        onChange={(e) => setSelected(e.target.value)}
-                        className="input-field"
-                      >
-                        {TOKENS.map(t => (
-                          <option key={t.addr} value={t.addr}>
-                            {t.sym}
-                          </option>
-                        ))}
-                      </select>
+                  <div style={{ fontFamily: 'monospace', fontSize: '16px', color: '#e2e8f0', wordBreak: 'break-all' }}>
+                    {cid}
+                  </div>
+                </div>
+
+                {/* Demo Content */}
+                <div style={{
+                  padding: '20px',
+                  backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  borderRadius: '8px'
+                }}>
+                  <h5 style={{ margin: '0 0 12px 0', color: '#60a5fa' }}>🎯 Experience Preview</h5>
+                  <p style={{ margin: '0 0 12px 0', lineHeight: '1.6' }}>
+                    This is exclusive content only visible to pass holders! In a real implementation, 
+                    this could be:
+                  </p>
+                  <ul style={{ margin: '0', paddingLeft: '20px', lineHeight: '1.6' }}>
+                    <li>Video content or streaming access</li>
+                    <li>Private community chat or Discord</li>
+                    <li>Downloadable files and resources</li>
+                    <li>Live event access and perks</li>
+                    <li>Interactive experiences and games</li>
+                  </ul>
+                </div>
                     </div>
 
-                    {/* Quantity */}
+              {/* Additional Purchase Option */}
+              <div style={{
+                padding: '16px',
+                backgroundColor: '#f8fafc',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0'
+              }}>
+                <h5 style={{ margin: '0 0 12px 0', color: '#475569' }}>Want more passes?</h5>
+                <button 
+                  onClick={() => setShowContent(false)}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  🛒 Purchase More Passes
+                </button>
+              </div>
+            </div>
+          ) : (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Quantity
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#374151' }}>
+                  Quantity:
                       </label>
                       <input
                         type="number"
@@ -468,152 +563,203 @@ export default function BuyPage({ params }: { params: { address: `0x${string}` }
                         max="10"
                         value={qty}
                         onChange={(e) => setQty(parseInt(e.target.value) || 1)}
-                        className="input-field"
+                  style={{ 
+                    width: '100%',
+                    padding: '12px',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '8px',
+                    fontSize: '16px',
+                    outline: 'none'
+                  }}
                       />
                     </div>
 
-                    {/* Price Info */}
-                    {price !== null && (
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <span className="text-gray-600">Unit Price:</span>
-                            <div className="font-medium text-lg">
-                              {formattedPrice} {selectedToken?.sym}
+              <div style={{ 
+                marginBottom: '24px', 
+                padding: '20px', 
+                backgroundColor: '#f8fafc', 
+                borderRadius: '8px',
+                border: '1px solid #e5e7eb'
+              }}>
+                <h4 style={{ margin: '0 0 12px 0', color: '#374151', fontSize: '16px' }}>Cost Breakdown</h4>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ color: '#6b7280' }}>Total Cost:</span>
+                  <span style={{ fontWeight: '600', color: '#1e293b' }}>{formatEther(totalCost)} ETH</span>
                             </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ color: '#6b7280' }}>Platform Fee (5%):</span>
+                  <span style={{ color: '#6b7280' }}>{formatEther(totalCost * 500n / 10_000n)} ETH</span>
                           </div>
-                          <div>
-                            <span className="text-gray-600">Total Cost:</span>
-                            <div className="font-medium text-lg">
-                              {formattedTotal} {selectedToken?.sym}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ color: '#6b7280' }}>Proposer Fee (10%):</span>
+                  <span style={{ color: '#6b7280' }}>{formatEther(totalCost * 1000n / 10_000n)} ETH</span>
                             </div>
-                          </div>
-                          <div>
-                            <span className="text-gray-600">Approval:</span>
-                            <div className={`font-medium ${needsApproval ? 'text-warning-600' : 'text-success-600'}`}>
-                              {needsApproval ? 'Required' : 'Approved'}
-                            </div>
-                          </div>
-                          <div>
-                            <span className="text-gray-600">Token Standard:</span>
-                            <div className="font-medium">ERC-1155</div>
-                          </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#6b7280' }}>Creator Amount (85%):</span>
+                  <span style={{ color: '#6b7280' }}>{formatEther(totalCost * 8500n / 10_000n)} ETH</span>
                         </div>
                       </div>
-                    )}
-
-                    {/* Action Buttons */}
-                    <div className="space-y-3">
-                      {needsApproval && (
-                        <button
-                          onClick={approveToken}
-                          disabled={loading !== ''}
-                          className="btn-warning w-full"
-                        >
-                          Approve {selectedToken?.sym}
-                        </button>
-                      )}
                       
                       <button
-                        onClick={buyAccess}
-                        disabled={loading !== '' || !price || price === 0n || needsApproval}
-                        className="btn-primary w-full text-lg py-4"
-                      >
-                        Buy Access Pass ({qty} {qty === 1 ? 'pass' : 'passes'})
+                onClick={handleBuy}
+                disabled={loading || priceEthWei === 0n}
+                style={{ 
+                  width: '100%',
+                  padding: '16px', 
+                  fontSize: '18px', 
+                  fontWeight: '600',
+                  backgroundColor: loading || priceEthWei === 0n ? '#9ca3af' : '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: loading || priceEthWei === 0n ? 'not-allowed' : 'pointer',
+                  transition: 'background-color 0.2s'
+                }}
+              >
+                {loading ? '⏳ Processing...' : `🎫 Buy ${qty} Pass${qty > 1 ? 'es' : ''} with ETH`}
                       </button>
-                    </div>
                   </div>
                 )}
-              </div>
             </div>
 
-            {/* Info Sidebar */}
-            <div className="space-y-6">
-              {/* Contract Info */}
-              <div className="card">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Contract Info</h3>
-                <div className="space-y-3 text-sm">
+        {/* Right Column - Info */}
+        <div>
+          <div style={{ 
+            backgroundColor: 'white', 
+            padding: '30px', 
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            marginBottom: '20px'
+          }}>
+            <h3 style={{ marginTop: 0, color: '#1e293b', fontSize: '18px', fontWeight: '600', marginBottom: '20px' }}>
+              📋 Contract Information
+            </h3>
+            <div style={{ display: 'grid', gap: '12px' }}>
                   <div>
-                    <span className="text-gray-600">Experience:</span>
-                    <div className="font-mono text-xs break-all">{exp}</div>
+                <span style={{ color: '#6b7280', fontSize: '14px' }}>Experience Contract:</span>
+                <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#374151', wordBreak: 'break-all' }}>
+                  {experience}
+                </div>
                   </div>
                   <div>
-                    <span className="text-gray-600">Network:</span>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-success-500 rounded-full"></div>
-                      <span>Ethereum Sepolia</span>
+                <span style={{ color: '#6b7280', fontSize: '14px' }}>Owner:</span>
+                <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#374151', wordBreak: 'break-all' }}>
+                  {owner}
                     </div>
                   </div>
                   <div>
-                    <span className="text-gray-600">Token Standard:</span>
-                    <div>ERC-1155 (Soulbound)</div>
-                  </div>
+                <span style={{ color: '#6b7280', fontSize: '14px' }}>Price per Pass:</span>
+                <div style={{ fontSize: '20px', fontWeight: '600', color: '#10b981' }}>
+                  {formatEther(priceEthWei)} ETH
                 </div>
               </div>
-
-              {/* Payment Split */}
-              <div className="card">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Payment Split</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Creator</span>
-                    <span className="font-medium">85%</span>
+              <div>
+                <span style={{ color: '#6b7280', fontSize: '14px' }}>Current Proposer:</span>
+                <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#374151' }}>
+                  {currentProposer || 'None set'}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Collaborators</span>
-                    <span className="font-medium">10%</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Platform Fee</span>
-                    <span className="font-medium">5%</span>
-                  </div>
+              <div>
+                <span style={{ color: '#6b7280', fontSize: '14px' }}>Content CID:</span>
+                <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#374151', wordBreak: 'break-all' }}>
+                  {cid}
                 </div>
               </div>
+              {account && (
+                <div>
+                  <span style={{ color: '#6b7280', fontSize: '14px' }}>Your Passes:</span>
+                  <div style={{ 
+                    fontSize: '18px', 
+                    fontWeight: '600', 
+                    color: passBalance > 0 ? '#10b981' : '#6b7280' 
+                  }}>
+                    {passBalance.toString()} pass{passBalance !== 1n ? 'es' : ''}
+                    {passBalance > 0 && <span style={{ color: '#10b981', marginLeft: '8px' }}>✅</span>}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
 
-              {/* Features */}
-              <div className="card">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Pass Features</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-2">
-                    <svg className="w-4 h-4 text-success-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">Soulbound (Non-transferable)</span>
+          <div style={{ 
+            backgroundColor: 'white', 
+            padding: '30px', 
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          }}>
+            <h3 style={{ marginTop: 0, color: '#1e293b', fontSize: '18px', fontWeight: '600', marginBottom: '20px' }}>
+              ✨ Pass Features
+            </h3>
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ color: '#10b981', fontSize: '16px' }}>✅</span>
+                <span style={{ color: '#374151' }}>Soulbound (Non-transferable)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ color: '#10b981', fontSize: '16px' }}>✅</span>
+                <span style={{ color: '#374151' }}>Permanent Access</span>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <svg className="w-4 h-4 text-success-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">Permanent Access</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ color: '#10b981', fontSize: '16px' }}>✅</span>
+                <span style={{ color: '#374151' }}>Automated Payment Splits</span>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <svg className="w-4 h-4 text-success-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">Automated Payments</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ color: '#10b981', fontSize: '16px' }}>✅</span>
+                <span style={{ color: '#374151' }}>Native ETH Payments</span>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <svg className="w-4 h-4 text-success-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">Multi-token Support</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ color: '#10b981', fontSize: '16px' }}>✅</span>
+                <span style={{ color: '#374151' }}>ERC-1155 Standard</span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {status && (
-            <div className="mt-6 text-center">
-              <p className={`text-sm ${status.includes('Error') ? 'text-error-600' : 'text-gray-600'}`}>
-                {status}
-              </p>
+      {/* Status Messages */}
+      {error && (
+        <div style={{ 
+          maxWidth: '1200px', 
+          margin: '20px auto 0', 
+          padding: '16px', 
+          backgroundColor: '#fef2f2', 
+          border: '1px solid #fecaca',
+          color: '#dc2626', 
+          borderRadius: '8px',
+          fontWeight: '500'
+        }}>
+          ❌ {error}
             </div>
           )}
-        </div>
-      </main>
 
-      <Footer />
+      {txHash && (
+        <div style={{ 
+          maxWidth: '1200px', 
+          margin: '20px auto 0', 
+          padding: '16px', 
+          backgroundColor: '#f0fdf4', 
+          border: '1px solid #bbf7d0',
+          color: '#16a34a', 
+          borderRadius: '8px'
+        }}>
+          <div style={{ fontWeight: '600', marginBottom: '8px' }}>✅ Transaction Successful!</div>
+          <div style={{ fontSize: '14px', marginBottom: '8px' }}>
+            <strong>Hash:</strong> {txHash}
+          </div>
+          <a 
+            href={`https://sepolia.etherscan.io/tx/${txHash}`} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{ 
+              color: '#1d4ed8', 
+              textDecoration: 'none',
+              fontWeight: '500'
+            }}
+          >
+            🔗 View on Etherscan →
+          </a>
+        </div>
+      )}
     </div>
   );
 }

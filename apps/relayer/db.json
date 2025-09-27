@@ -1,0 +1,16 @@
+{
+  "proposals": [
+    {
+      "id": "47a8667a-ec63-4c3e-99df-a992db6f99f6",
+      "experience": "0x9585A7C5B664c6575cda710173B8d662E8EA0B87",
+      "proposer": "0xa8B131BfeBfc63c67263b8EA33cE91FA624FD9b6",
+      "title": "Test Proposal",
+      "summary": "Testing the proposal system",
+      "newCid": "ipfs://test-content",
+      "votesUp": 0,
+      "votesDown": 0,
+      "status": "pending",
+      "voters": []
+    }
+  ]
+}

@@ -4,13 +4,14 @@ pragma solidity ^0.8.24;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
- * Experience: ETH-only token-gated access sold in ERC-1155 "passes" (SBT, id=1).
- * Payments split: platform (immutable BPS), optional current proposer (state BPS), remainder to creator.
+ * ExperienceETH: token-gated access sold in ERC-1155 "passes" (SBT, id=1).
+ * Payments in ETH only. Split: platform (immutable BPS), optional current proposer (state BPS), remainder to creator.
  */
-contract Experience is ERC1155, Ownable2Step, ReentrancyGuard {
+contract ExperienceETH is ERC1155, Ownable2Step, ReentrancyGuard {
 
     // ---- Constants / immutables ----
     uint256 public constant PASS_ID = 1;
@@ -29,12 +30,12 @@ contract Experience is ERC1155, Ownable2Step, ReentrancyGuard {
     string private _cid;
 
     // ---- Pricing ----
-    uint256 public priceEthWei; // 0 means disabled
+    uint256 public pricePerPass; // in wei
 
     // ---- Events ----
-    event PriceUpdated(uint256 oldPrice, uint256 newPrice);
+    event PriceSet(uint256 price);
     event Bought(address indexed buyer, uint256 qty, uint256 paid);
-    event ProposerUpdated(address indexed proposer);
+    event CurrentProposerSet(address indexed proposer);
     event CidUpdated(string cid);
 
     // ---- Errors ----
@@ -44,7 +45,6 @@ contract Experience is ERC1155, Ownable2Step, ReentrancyGuard {
     error TransfersDisabled();
     error ZeroAddress();
     error InsufficientPayment();
-    error PaymentFailed();
 
     modifier onlyFlowSyncAuthority() {
         if (msg.sender != flowSyncAuthority) revert NotFlowSyncAuthority();
@@ -57,61 +57,65 @@ contract Experience is ERC1155, Ownable2Step, ReentrancyGuard {
         address _flowSyncAuthority,
         address _platformWallet,
         uint16 _platformFeeBps,
-        uint16 _proposerFeeBps
+        uint256 _pricePerPass
     ) ERC1155("") Ownable(_creator) {
         if (_creator == address(0) || _platformWallet == address(0)) revert ZeroAddress();
         creator = _creator;
         flowSyncAuthority = _flowSyncAuthority;
         PLATFORM_WALLET = _platformWallet;
         PLATFORM_FEE_BPS = _platformFeeBps;
-        proposerFeeBps = _proposerFeeBps;
+        proposerFeeBps = 1000; // 10%
         _cid = cidInitial;
-        priceEthWei = 0; // disabled initially
+        pricePerPass = _pricePerPass;
     }
 
     // --- Owner (creator) controls price ---
-    function setPriceEthWei(uint256 _priceEthWei) external onlyOwner {
-        uint256 oldPrice = priceEthWei;
-        priceEthWei = _priceEthWei;
-        emit PriceUpdated(oldPrice, _priceEthWei);
+    function setPrice(uint256 _pricePerPass) external onlyOwner {
+        pricePerPass = _pricePerPass;
+        emit PriceSet(_pricePerPass);
     }
 
     // --- Buy flow ---
-    function buyWithEth(uint256 qty) external payable nonReentrant {
-        if (qty == 0) revert InvalidQuantity();
-        if (priceEthWei == 0) revert InvalidPrice();
-        
-        uint256 paid = priceEthWei * qty;
-        if (msg.value != paid) revert InsufficientPayment();
+    function buyPasses(uint256 quantity) external payable nonReentrant {
+        if (pricePerPass == 0) revert InvalidPrice();
+        if (quantity == 0) revert InvalidQuantity();
+
+        uint256 cost = pricePerPass * quantity;
+        if (msg.value < cost) revert InsufficientPayment();
 
         // Calculate splits
-        uint256 platform = (paid * PLATFORM_FEE_BPS) / 10_000;
-        uint256 proposer = (currentProposer == address(0)) ? 0 : (paid * proposerFeeBps) / 10_000;
-        uint256 creatorAmount = paid - platform - proposer;
+        uint256 platformAmt = (cost * PLATFORM_FEE_BPS) / 10_000;
+        uint256 proposerAmt = currentProposer == address(0) ? 0 : (cost * proposerFeeBps) / 10_000;
+        uint256 creatorAmt = cost - platformAmt - proposerAmt;
 
-        // Payout via call checks (no reverts swallowed)
-        if (platform > 0) {
-            (bool success, ) = PLATFORM_WALLET.call{value: platform}("");
-            if (!success) revert PaymentFailed();
+        // Transfer ETH
+        if (platformAmt > 0) {
+            (bool success, ) = PLATFORM_WALLET.call{value: platformAmt}("");
+            require(success, "Platform transfer failed");
         }
-        if (proposer > 0) {
-            (bool success, ) = currentProposer.call{value: proposer}("");
-            if (!success) revert PaymentFailed();
+        if (proposerAmt > 0) {
+            (bool success, ) = currentProposer.call{value: proposerAmt}("");
+            require(success, "Proposer transfer failed");
         }
-        if (creatorAmount > 0) {
-            (bool success, ) = creator.call{value: creatorAmount}("");
-            if (!success) revert PaymentFailed();
+        if (creatorAmt > 0) {
+            (bool success, ) = creator.call{value: creatorAmt}("");
+            require(success, "Creator transfer failed");
         }
 
-        // Mint SBT
-        _mint(msg.sender, PASS_ID, qty, "");
-        emit Bought(msg.sender, qty, paid);
+        // Refund excess
+        if (msg.value > cost) {
+            (bool success, ) = msg.sender.call{value: msg.value - cost}("");
+            require(success, "Refund failed");
+        }
+
+        _mintPass(msg.sender, quantity);
+        emit Bought(msg.sender, quantity, cost);
     }
 
     // --- Flow sync authority updates ---
     function setCurrentProposer(address proposer) external onlyFlowSyncAuthority {
         currentProposer = proposer;
-        emit ProposerUpdated(proposer);
+        emit CurrentProposerSet(proposer);
     }
 
     function setCid(string calldata newCid) external onlyFlowSyncAuthority {
@@ -134,7 +138,12 @@ contract Experience is ERC1155, Ownable2Step, ReentrancyGuard {
         proposerFeeBps = bps;
     }
 
-    // ---- SBT enforcement: override transfer hooks to revert ----
+    // ---- Soulbound ERC-1155 implementation ----
+    function _mintPass(address to, uint256 qty) internal {
+        _mint(to, PASS_ID, qty, "");
+    }
+
+    // Block transfers except mint/burn
     function safeTransferFrom(address, address, uint256, uint256, bytes memory) public virtual override {
         revert TransfersDisabled();
     }
