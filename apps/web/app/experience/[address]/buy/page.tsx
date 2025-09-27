@@ -87,9 +87,20 @@ export default function BuyPage({ params }: { params: { address: `0x${string}` }
       
       // If there are multiple wallets, try to select MetaMask specifically
       if (ethereum.providers?.length) {
-        console.log("Multiple providers detected, selecting MetaMask...");
-        const metamaskProvider = ethereum.providers.find((provider: any) => provider.isMetaMask);
+        console.log(`Multiple providers detected (${ethereum.providers.length}), selecting MetaMask...`);
+        console.log("Available providers:", ethereum.providers.map((p: any) => ({
+          isMetaMask: p.isMetaMask,
+          isCoinbaseWallet: p.isCoinbaseWallet,
+          isRabby: p.isRabby
+        })));
+        
+        const metamaskProvider = ethereum.providers.find((provider: any) => 
+          provider.isMetaMask && !provider.isCoinbaseWallet
+        );
+        
         if (metamaskProvider) {
+          console.log("Found MetaMask provider, requesting accounts...");
+          
           // Use MetaMask specifically
           const accounts = await metamaskProvider.request({ 
             method: "eth_requestAccounts" 
@@ -113,7 +124,7 @@ export default function BuyPage({ params }: { params: { address: `0x${string}` }
           setWallet(w);
           console.log("Wallet client created with MetaMask provider");
         } else {
-          throw new Error("MetaMask not found among wallet providers");
+          throw new Error("MetaMask not found among wallet providers. Please disable other wallet extensions or try the fallback method.");
         }
       } else {
         // Single provider (likely MetaMask)
@@ -311,6 +322,52 @@ export default function BuyPage({ params }: { params: { address: `0x${string}` }
                     <div className="space-y-3">
                       <button onClick={connectWallet} className="btn-primary w-full">
                         Connect MetaMask Wallet
+                      </button>
+                      <button 
+                        onClick={async () => {
+                          console.log("Trying direct MetaMask connection...");
+                          if ((window as any).ethereum?.providers) {
+                            const metamask = (window as any).ethereum.providers.find((p: any) => p.isMetaMask);
+                            if (metamask) {
+                              try {
+                                setLoading("Connecting directly to MetaMask...");
+                                const accounts = await metamask.request({ method: "eth_requestAccounts" });
+                                setAccount(accounts[0]);
+                                const w = createWalletClient({ chain, transport: custom(metamask) });
+                                setWallet(w);
+                                setSuccess("MetaMask connected successfully!");
+                              } catch (err: any) {
+                                setError("Direct MetaMask connection failed: " + err.message);
+                              } finally {
+                                setLoading("");
+                              }
+                            }
+                          }
+                        }}
+                        className="btn-warning w-full text-sm"
+                      >
+                        Force MetaMask Connection
+                      </button>
+                      <button 
+                        onClick={async () => {
+                          console.log("Switching to Sepolia network...");
+                          try {
+                            await (window as any).ethereum.request({
+                              method: 'wallet_switchEthereumChain',
+                              params: [{ chainId: '0xaa36a7' }], // Sepolia chain ID
+                            });
+                            setSuccess("Switched to Sepolia network!");
+                          } catch (err: any) {
+                            if (err.code === 4902) {
+                              setError("Sepolia network not found. Please add it to MetaMask manually.");
+                            } else {
+                              setError("Failed to switch network: " + err.message);
+                            }
+                          }
+                        }}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm w-full transition-colors"
+                      >
+                        Switch to Sepolia Network
                       </button>
                       <button 
                         onClick={() => {
