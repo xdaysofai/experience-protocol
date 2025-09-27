@@ -1,17 +1,12 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { createPublicClient, http, formatEther } from 'viem';
-import { sepolia } from 'viem/chains';
+import { formatEther, parseEther } from 'viem';
 import ExperienceAbi from '../../abi/Experience.json';
-import { lighthouseService, isLighthouseAvailable, promptForApiKey, ExperienceIndex } from '../../lib/lighthouse';
+import { lighthouseService, isLighthouseAvailable, promptForApiKey, ExperienceIndex, PurchaseIndex } from '../../lib/lighthouse';
 import { experienceRegistryService, ExperienceInfo } from '../../lib/experienceRegistry';
 import { useWallet } from '../../contexts/WalletContext';
 import WalletButton from '../../components/WalletButton';
-
-const publicClient = createPublicClient({
-  chain: sepolia,
-  transport: http(process.env.NEXT_PUBLIC_RPC || 'https://ethereum-sepolia-rpc.publicnode.com'),
-});
+import { publicClient } from '../../lib/viemClient';
 
 const factoryAbi = [
   {
@@ -36,6 +31,8 @@ interface ExperienceInfo {
   isCreator: boolean;
 }
 
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
 export default function CreatorDashboard() {
   const { account, wallet, isConnected, isWrongNetwork } = useWallet();
   const [loading, setLoading] = useState<string>('');
@@ -57,6 +54,7 @@ export default function CreatorDashboard() {
   
   // Lighthouse integration
   const [lighthouseHash, setLighthouseHash] = useState<string>('');
+  const [purchaseHash, setPurchaseHash] = useState<string>('');
   const [showLighthouseSetup, setShowLighthouseSetup] = useState<boolean>(false);
   const [lighthouseEnabled, setLighthouseEnabled] = useState<boolean>(false);
 
@@ -104,6 +102,8 @@ export default function CreatorDashboard() {
           allExperiences.set(lhExp.address.toLowerCase(), info);
         } catch (err) {
           console.warn(`Failed to load Lighthouse experience ${lhExp.address}:`, err);
+          const fallback = experienceFromIndex(lhExp, account);
+          allExperiences.set(lhExp.address.toLowerCase(), fallback);
         }
       }
       
@@ -226,28 +226,48 @@ export default function CreatorDashboard() {
   }
 
   async function loadPurchasedExperiences() {
-    // Load purchased experiences from known addresses
+    if (!account) return;
+
+    const purchasesMap = new Map<string, ExperienceInfo>();
+
+    const lighthousePurchases = await loadPurchasesFromLighthouse();
+
+    for (const purchase of lighthousePurchases) {
+      try {
+        const info = await getExperienceInfo(purchase.experience, account);
+        const key = purchase.experience.toLowerCase();
+        const withBalance = info.passBalance > 0n
+          ? info
+          : { ...info, passBalance: BigInt(purchase.totalQuantity || 0), isOwned: (purchase.totalQuantity || 0) > 0 };
+        purchasesMap.set(key, withBalance);
+      } catch (err) {
+        console.warn('Fallback to Lighthouse data for purchase:', purchase.experience, err);
+        const fallback = experienceFromPurchase(purchase, account);
+        purchasesMap.set(purchase.experience.toLowerCase(), fallback);
+      }
+    }
+
+    // Known experiences fallback (useful for first-time loads)
     const knownAddresses = [
       '0x5455558b5ca1E0622d63857d15a7cBcE5eE1322A',
       '0xBA0182EEfF04A8d7BAA04Afcc4BBCd0ac74Ce88F',
     ];
 
-    const purchased: ExperienceInfo[] = [];
-    
     for (const address of knownAddresses) {
+      const key = address.toLowerCase();
+      if (purchasesMap.has(key)) continue;
+
       try {
         const info = await getExperienceInfo(address, account);
-        
-        // Only add to purchased if user owns passes but didn't create it
-        if (info.passBalance > 0 && !info.isCreator) {
-          purchased.push(info);
+        if (info.passBalance > 0n && !info.isCreator) {
+          purchasesMap.set(key, info);
         }
       } catch (err) {
-        console.error('Failed to load known experience:', address, err);
+        console.warn('Known purchase lookup failed:', address, err);
       }
     }
-    
-    setPurchasedExperiences(purchased);
+
+    setPurchasedExperiences(Array.from(purchasesMap.values()));
   }
 
   async function getExperienceInfo(address: string, userAccount: string): Promise<ExperienceInfo> {
@@ -277,6 +297,52 @@ export default function CreatorDashboard() {
       isOwned: (passBalance as bigint) > 0,
       passBalance: passBalance as bigint,
       isCreator: (owner as string).toLowerCase() === userAccount.toLowerCase()
+    };
+  }
+
+  function parsePriceToWei(price?: string): bigint {
+    if (!price) return 0n;
+    try {
+      return parseEther(price);
+    } catch (err) {
+      console.warn('Failed to parse price, defaulting to 0:', err);
+      return 0n;
+    }
+  }
+
+  function experienceFromIndex(
+    index: ExperienceIndex,
+    userAccount: string,
+    passBalance: bigint = 0n
+  ): ExperienceInfo {
+    const lowerCreator = index.creator?.toLowerCase?.() || '';
+    return {
+      address: index.address,
+      owner: index.creator || ZERO_ADDRESS,
+      cid: index.cid || '',
+      priceEthWei: parsePriceToWei(index.metadata?.priceEth),
+      currentProposer: ZERO_ADDRESS,
+      isOwned: passBalance > 0n,
+      passBalance,
+      isCreator: lowerCreator === userAccount.toLowerCase(),
+    };
+  }
+
+  function experienceFromPurchase(
+    purchase: PurchaseIndex,
+    userAccount: string
+  ): ExperienceInfo {
+    const balance = BigInt(purchase.totalQuantity || 0);
+    const owner = purchase.creator || ZERO_ADDRESS;
+    return {
+      address: purchase.experience,
+      owner,
+      cid: purchase.cid || '',
+      priceEthWei: parsePriceToWei(purchase.priceEth),
+      currentProposer: ZERO_ADDRESS,
+      isOwned: balance > 0n,
+      passBalance: balance,
+      isCreator: owner.toLowerCase() === userAccount.toLowerCase(),
     };
   }
 
@@ -432,6 +498,12 @@ export default function CreatorDashboard() {
         setLighthouseHash(hash);
         console.log('Found existing Lighthouse hash:', hash);
       }
+
+      const purchase = lighthouseService.loadPurchaseHashFromLocalStorage(account);
+      if (purchase) {
+        setPurchaseHash(purchase);
+        console.log('Found existing purchase hash:', purchase);
+      }
     }
   }
 
@@ -462,6 +534,21 @@ export default function CreatorDashboard() {
     } catch (error: any) {
       console.error('Failed to load from Lighthouse:', error);
       // Don't show error to user for Lighthouse failures
+      return [];
+    }
+  }
+
+  async function loadPurchasesFromLighthouse(): Promise<PurchaseIndex[]> {
+    if (!lighthouseEnabled || !purchaseHash || !account) {
+      return [];
+    }
+
+    try {
+      const data = await lighthouseService.loadPurchasedExperienceList(purchaseHash);
+      console.log(`Loaded ${data.purchases.length} purchases from Lighthouse`);
+      return data.purchases || [];
+    } catch (error: any) {
+      console.error('Failed to load purchases from Lighthouse:', error);
       return [];
     }
   }

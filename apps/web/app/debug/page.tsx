@@ -1,15 +1,10 @@
 "use client";
 import { useState } from 'react';
-import { createPublicClient, http, formatEther } from 'viem';
-import { sepolia } from 'viem/chains';
+import { formatEther } from 'viem';
 import ExperienceAbi from '../../abi/Experience.json';
 import { useWallet } from '../../contexts/WalletContext';
 import WalletButton from '../../components/WalletButton';
-
-const publicClient = createPublicClient({
-  chain: sepolia,
-  transport: http(process.env.NEXT_PUBLIC_RPC || 'https://ethereum-sepolia-rpc.publicnode.com'),
-});
+import { publicClient } from '../../lib/viemClient';
 
 interface ExperienceResult {
   address: string;

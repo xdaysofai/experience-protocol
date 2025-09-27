@@ -1,13 +1,10 @@
 "use client";
 import { useState } from 'react';
-import { createPublicClient, createWalletClient, custom, http, parseEther } from 'viem';
+import { createWalletClient, custom, parseEther, parseEventLogs } from 'viem';
 import { sepolia } from 'viem/chains';
 import { getInjectedProvider } from '../../lib/provider';
-
-const publicClient = createPublicClient({
-  chain: sepolia,
-  transport: http(process.env.NEXT_PUBLIC_RPC || 'https://ethereum-sepolia-rpc.publicnode.com'),
-});
+import { publicClient } from '../../lib/viemClient';
+import { lighthouseService, ExperienceIndex } from '../../lib/lighthouse';
 
 const factoryAbi = [
   {
@@ -21,6 +18,15 @@ const factoryAbi = [
     ],
     "outputs": [{"name": "experience", "type": "address"}],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "ExperienceCreated",
+    "inputs": [
+      { "name": "creator", "type": "address", "indexed": true },
+      { "name": "experience", "type": "address", "indexed": false },
+      { "name": "cidInitial", "type": "string", "indexed": false }
+    ]
   }
 ] as const;
 
@@ -204,9 +210,54 @@ export default function CreateExperience() {
       // Wait for transaction
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       console.log('Experience created! Transaction:', receipt);
-      
-      // Extract experience address from logs (you might need to parse this properly)
-      setSuccess(`Experience created successfully! Transaction: ${hash}`);
+
+      let experienceAddress: `0x${string}` | undefined;
+      try {
+        const parsed = parseEventLogs({
+          abi: factoryAbi,
+          eventName: 'ExperienceCreated',
+          logs: receipt.logs,
+        });
+        experienceAddress = parsed[0]?.args?.experience as `0x${string}` | undefined;
+      } catch (err) {
+        console.warn('Failed to parse ExperienceCreated logs:', err);
+      }
+
+      if (experienceAddress) {
+        const experienceIndex: ExperienceIndex = {
+          address: experienceAddress,
+          creator: account,
+          cid: cidInitial,
+          createdAt: Date.now(),
+          deployTxHash: hash,
+          metadata: {
+            title: experienceData.title,
+            description: experienceData.description,
+            categories: experienceData.categories,
+            location: experienceData.location,
+            priceEth: experienceData.pricePerPass,
+          },
+        };
+
+        try {
+          const existingHash = lighthouseService.loadHashFromLocalStorage(account);
+          const newHash = await lighthouseService.addExperienceToList(
+            account,
+            experienceIndex,
+            existingHash || undefined
+          );
+          lighthouseService.saveHashToLocalStorage(account, newHash);
+          console.log('Persisted new experience to Lighthouse:', newHash);
+        } catch (persistErr) {
+          console.warn('Failed to persist experience to Lighthouse:', persistErr);
+        }
+      }
+
+      setSuccess(
+        experienceAddress
+          ? `Experience deployed at ${experienceAddress}. Transaction: ${hash}`
+          : `Experience created successfully! Transaction: ${hash}`
+      );
       
       // Reset form
       setCurrentStep(0);

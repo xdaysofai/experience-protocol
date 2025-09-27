@@ -1,14 +1,9 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { createPublicClient, http } from 'viem';
-import { sepolia } from 'viem/chains';
 import ExperienceAbi from '../../../../abi/Experience.json';
 import { getInjectedProvider } from '../../../../lib/provider';
-
-const publicClient = createPublicClient({
-  chain: sepolia,
-  transport: http(process.env.NEXT_PUBLIC_RPC || 'https://rpc.sepolia.org'),
-});
+import { publicClient } from '../../../../lib/viemClient';
+import { resolveAddressIdentity, formatAddress, AddressIdentity } from '../../../../lib/identity';
 
 const RELAYER_URL = process.env.NEXT_PUBLIC_RELAYER_URL || 'http://localhost:4000';
 
@@ -38,14 +33,36 @@ export default function ProposalsPage({ params }: { params: { address: string } 
     summary: '',
     newCid: ''
   });
+  const [identityMap, setIdentityMap] = useState<Record<string, AddressIdentity>>({});
 
   const isOwner = account && owner && account.toLowerCase() === owner.toLowerCase();
+  const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+  const identityFor = (address?: string) => (address ? identityMap[address.toLowerCase()] : undefined);
 
   useEffect(() => {
     loadOwner();
     loadProposals();
     connectWallet();
   }, [experience]);
+
+  useEffect(() => {
+    const addresses = new Set<string>();
+    if (owner) addresses.add(owner);
+    proposals.forEach((proposal) => {
+      if (proposal.proposer) addresses.add(proposal.proposer);
+    });
+
+    addresses.forEach((addr) => {
+      if (!addr || addr === ZERO_ADDRESS) return;
+      const key = addr.toLowerCase();
+      if (identityMap[key]) return;
+
+      resolveAddressIdentity(addr).then((identity) => {
+        if (!identity) return;
+        setIdentityMap((prev) => (prev[key] ? prev : { ...prev, [key]: identity }));
+      });
+    });
+  }, [owner, proposals, identityMap]);
 
   async function loadOwner() {
     try {
@@ -172,7 +189,10 @@ export default function ProposalsPage({ params }: { params: { address: string } 
       
       <div style={{ marginBottom: '20px', padding: '15px', border: '1px solid #ddd', borderRadius: '8px' }}>
         <p><strong>Experience:</strong> {experience}</p>
-        <p><strong>Owner:</strong> {owner}</p>
+        <p>
+          <strong>Owner:</strong>{' '}
+          {owner ? <span title={owner}>{formatAddress(owner, identityFor(owner))}</span> : '—'}
+        </p>
         <p><strong>Connected:</strong> {account || 'Not connected'}</p>
         <p><strong>Access:</strong> {isOwner ? '✅ Owner (can accept)' : '👁️ Viewer (can vote)'}</p>
       </div>
@@ -272,7 +292,12 @@ export default function ProposalsPage({ params }: { params: { address: string } 
                 <h3 style={{ margin: '0 0 10px 0' }}>{proposal.title}</h3>
                 <p style={{ margin: '0 0 10px 0', color: '#666' }}>{proposal.summary}</p>
                 <p style={{ margin: '0 0 10px 0', fontSize: '12px' }}>
-                  <strong>Proposer:</strong> {proposal.proposer}<br />
+                  <strong>Proposer:</strong>{' '}
+                  <span title={proposal.proposer}>{formatAddress(proposal.proposer, identityFor(proposal.proposer))}</span>
+                  {identityFor(proposal.proposer)?.verified && (
+                    <span style={{ marginLeft: '6px', color: '#0f766e', fontSize: '12px' }}>✅</span>
+                  )}
+                  <br />
                   <strong>New CID:</strong> {proposal.newCid}<br />
                   <strong>Status:</strong> <span style={{ 
                     color: proposal.status === 'accepted' ? '#28a745' : 

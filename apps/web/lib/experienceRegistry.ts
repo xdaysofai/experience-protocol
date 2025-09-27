@@ -1,10 +1,4 @@
-import { createPublicClient, http } from 'viem';
-import { sepolia } from 'viem/chains';
-
-const publicClient = createPublicClient({
-  chain: sepolia,
-  transport: http(process.env.NEXT_PUBLIC_RPC || 'https://ethereum-sepolia-rpc.publicnode.com'),
-});
+import { publicClient } from './viemClient';
 
 export const REGISTRY_ABI = [
   {

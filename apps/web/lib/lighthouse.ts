@@ -16,9 +16,27 @@ export interface ExperienceIndex {
   };
 }
 
+export interface PurchaseIndex {
+  experience: string;
+  purchaser: string;
+  totalQuantity: number;
+  lastPurchaseAt: number;
+  lastTxHash?: string;
+  creator?: string;
+  cid?: string;
+  priceEth?: string;
+}
+
 export interface CreatorExperienceList {
   wallet: string;
   experiences: ExperienceIndex[];
+  lastUpdated: number;
+  version: number;
+}
+
+export interface PurchasedExperienceList {
+  wallet: string;
+  purchases: PurchaseIndex[];
   lastUpdated: number;
   version: number;
 }
@@ -86,6 +104,25 @@ class LighthouseService {
     return JSON.parse(jsonData) as CreatorExperienceList;
   }
 
+  async savePurchasedExperienceList(wallet: string, purchases: PurchaseIndex[]): Promise<string> {
+    const data: PurchasedExperienceList = {
+      wallet: wallet.toLowerCase(),
+      purchases,
+      lastUpdated: Date.now(),
+      version: 1
+    };
+
+    const jsonData = JSON.stringify(data, null, 2);
+    const filename = `purchased-experiences-${wallet.toLowerCase()}.json`;
+
+    return await this.uploadText(jsonData, filename);
+  }
+
+  async loadPurchasedExperienceList(hash: string): Promise<PurchasedExperienceList> {
+    const jsonData = await this.downloadText(hash);
+    return JSON.parse(jsonData) as PurchasedExperienceList;
+  }
+
   async addExperienceToList(
     wallet: string, 
     newExperience: ExperienceIndex, 
@@ -122,6 +159,46 @@ class LighthouseService {
     return await this.saveCreatorExperienceList(wallet, experiences);
   }
 
+  async addPurchaseToList(
+    wallet: string,
+    purchase: PurchaseIndex,
+    currentHash?: string
+  ): Promise<string> {
+    let purchases: PurchaseIndex[] = [];
+
+    if (currentHash) {
+      try {
+        const existing = await this.loadPurchasedExperienceList(currentHash);
+        purchases = existing.purchases || [];
+      } catch (error) {
+        console.warn('Could not load existing purchase list, starting fresh');
+      }
+    }
+
+    const idx = purchases.findIndex(
+      (p) => p.experience.toLowerCase() === purchase.experience.toLowerCase()
+    );
+
+    if (idx >= 0) {
+      const existing = purchases[idx];
+      purchases[idx] = {
+        ...existing,
+        totalQuantity: existing.totalQuantity + purchase.totalQuantity,
+        lastPurchaseAt: purchase.lastPurchaseAt,
+        lastTxHash: purchase.lastTxHash || existing.lastTxHash,
+        cid: purchase.cid || existing.cid,
+        priceEth: purchase.priceEth || existing.priceEth,
+        creator: purchase.creator || existing.creator,
+      };
+    } else {
+      purchases.push(purchase);
+    }
+
+    purchases.sort((a, b) => b.lastPurchaseAt - a.lastPurchaseAt);
+
+    return await this.savePurchasedExperienceList(wallet, purchases);
+  }
+
   // Generate a consistent storage key for a wallet's experience list
   generateStorageKey(wallet: string): string {
     return `lighthouse-experiences-${wallet.toLowerCase()}`;
@@ -137,6 +214,19 @@ class LighthouseService {
     }
   }
 
+  generatePurchaseStorageKey(wallet: string): string {
+    return `lighthouse-purchases-${wallet.toLowerCase()}`;
+  }
+
+  savePurchaseHashToLocalStorage(wallet: string, hash: string) {
+    try {
+      const key = this.generatePurchaseStorageKey(wallet);
+      localStorage.setItem(key, hash);
+    } catch (error) {
+      console.warn('Failed to save purchase hash:', error);
+    }
+  }
+
   // Load hash from localStorage
   loadHashFromLocalStorage(wallet: string): string | null {
     try {
@@ -148,11 +238,23 @@ class LighthouseService {
     }
   }
 
+  loadPurchaseHashFromLocalStorage(wallet: string): string | null {
+    try {
+      const key = this.generatePurchaseStorageKey(wallet);
+      return localStorage.getItem(key);
+    } catch (error) {
+      console.warn('Failed to load purchase hash:', error);
+      return null;
+    }
+  }
+
   // Clear localStorage for a wallet
   clearLocalStorage(wallet: string) {
     try {
       const key = this.generateStorageKey(wallet);
       localStorage.removeItem(key);
+      const purchaseKey = this.generatePurchaseStorageKey(wallet);
+      localStorage.removeItem(purchaseKey);
     } catch (error) {
       console.warn('Failed to clear localStorage:', error);
     }

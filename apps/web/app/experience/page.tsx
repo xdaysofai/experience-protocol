@@ -1,13 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { createPublicClient, http } from 'viem';
-import { sepolia } from 'viem/chains';
 import { getInjectedProvider } from '../../lib/provider';
-
-const publicClient = createPublicClient({
-  chain: sepolia,
-  transport: http(process.env.NEXT_PUBLIC_RPC || 'https://ethereum-sepolia-rpc.publicnode.com'),
-});
+import { publicClient } from '../../lib/viemClient';
 
 // Known experiences - in production this could come from a subgraph or event logs
 const KNOWN_EXPERIENCES = [
