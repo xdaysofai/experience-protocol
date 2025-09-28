@@ -15,9 +15,9 @@ export default function Card({
   padding = 'md',
 }: CardProps) {
   const paddingClasses = {
-    sm: 'p-4',
-    md: 'p-6',
-    lg: 'p-8',
+    sm: 'p-4 sm:p-5',
+    md: 'p-5 sm:p-6',
+    lg: 'p-6 sm:p-8',
   };
 
   const classes = [

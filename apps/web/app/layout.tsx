@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { WalletProvider } from '../contexts/WalletContext';
-import WalletButton from '../components/WalletButton';
+import SiteHeader from '../components/SiteHeader';
 
 export const metadata: Metadata = {
   title: 'Experience Protocol',
@@ -26,77 +26,62 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 text-gray-900 dark:text-gray-100 antialiased" suppressHydrationWarning>
         <WalletProvider>
           <div className="min-h-screen flex flex-col">
-            <header className="sticky top-0 z-sticky bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-gray-200 dark:border-slate-700">
-              <div className="container mx-auto px-4">
-                <div className="flex items-center justify-between h-16">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center">
-                      <span className="text-white font-bold text-sm">XP</span>
-                    </div>
-                    <span className="text-xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
-                      Experience Protocol
-                    </span>
-                  </div>
-                  <nav className="hidden md:flex items-center gap-6">
-                    <a href="/" className="text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
-                      Home
-                    </a>
-                    <a href="/creator" className="text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
-                      Creator
-                    </a>
-                    <a href="/governance" className="text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
-                      Governance
-                    </a>
-                  </nav>
-                  <div className="flex items-center gap-3">
-                    <WalletButton size="sm" />
-                  </div>
-                </div>
-              </div>
-            </header>
-            
+            <SiteHeader />
+
             <main className="flex-1">
               {children}
             </main>
-            
-            <footer className="bg-gray-50 dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700">
-              <div className="container mx-auto px-4 py-8">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  <div>
-                    <div className="flex items-center gap-2 mb-4">
-                      <div className="w-6 h-6 bg-gradient-to-br from-primary-500 to-primary-700 rounded-md flex items-center justify-center">
-                        <span className="text-white font-bold text-xs">XP</span>
+
+            <footer className="border-t border-gray-200/80 bg-gray-50/80 backdrop-blur-sm dark:border-slate-700/80 dark:bg-slate-900/60">
+              <div className="container mx-auto px-4 py-10">
+                <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-700">
+                        <span className="text-xs font-bold text-white">XP</span>
                       </div>
-                      <span className="font-semibold">Experience Protocol</span>
+                      <span className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                        Experience Protocol
+                      </span>
                     </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Token-gated access with soulbound NFT passes and automated payment splitting.
+                    <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+                      Token-gated access with soulbound passes, automated revenue sharing, and proposer rewards backed by Ethereum Sepolia.
                     </p>
                   </div>
-                  
+
                   <div>
-                    <h3 className="font-semibold mb-4">Platform</h3>
-                    <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                      <li><a href="/creator" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Creator Dashboard</a></li>
-                      <li><a href="/governance" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Governance</a></li>
-                      <li><a href="#" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Documentation</a></li>
+                    <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      Platform
+                    </h3>
+                    <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                      <li><a href="/creator" className="transition-colors hover:text-primary-600 dark:hover:text-primary-400">Creator Dashboard</a></li>
+                      <li><a href="/governance" className="transition-colors hover:text-primary-600 dark:hover:text-primary-400">Governance</a></li>
+                      <li><a href="#" className="transition-colors hover:text-primary-600 dark:hover:text-primary-400">Documentation</a></li>
                     </ul>
                   </div>
-                  
+
                   <div>
-                    <h3 className="font-semibold mb-4">Community</h3>
-                    <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                      <li><a href="#" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Discord</a></li>
-                      <li><a href="#" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Twitter</a></li>
-                      <li><a href="#" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">GitHub</a></li>
+                    <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      Community
+                    </h3>
+                    <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                      <li><a href="#" className="transition-colors hover:text-primary-600 dark:hover:text-primary-400">Discord</a></li>
+                      <li><a href="#" className="transition-colors hover:text-primary-600 dark:hover:text-primary-400">Twitter / X</a></li>
+                      <li><a href="#" className="transition-colors hover:text-primary-600 dark:hover:text-primary-400">GitHub</a></li>
                     </ul>
                   </div>
                 </div>
-                
-                <div className="mt-8 pt-8 border-t border-gray-200 dark:border-slate-700">
-                  <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-                    © 2024 Experience Protocol. Built on Ethereum Sepolia.
-                  </p>
+
+                <div className="mt-10 flex flex-col gap-4 border-t border-gray-200 pt-6 text-sm text-gray-500 dark:border-slate-700 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between">
+                  <p>© 2024 Experience Protocol. Built with ❤️ for on-chain communities.</p>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <span>Powered by</span>
+                    <span className="font-medium text-gray-600 dark:text-gray-300">Ethereum Sepolia</span>
+                    <span className="text-gray-400">•</span>
+                    <span className="font-medium text-gray-600 dark:text-gray-300">Viem</span>
+                    <span className="text-gray-400">•</span>
+                    <span className="font-medium text-gray-600 dark:text-gray-300">Next.js</span>
+                  </div>
                 </div>
               </div>
             </footer>
