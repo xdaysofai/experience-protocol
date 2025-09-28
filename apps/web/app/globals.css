@@ -467,6 +467,18 @@ body {
   padding: 0 var(--space-6) var(--space-6);
 }
 
+@media (max-width: 640px) {
+  .card {
+    border-radius: var(--radius-lg);
+  }
+
+  .card-body,
+  .card-header,
+  .card-footer {
+    padding: var(--space-4);
+  }
+}
+
 /* Input styles */
 .input {
   width: 100%;
