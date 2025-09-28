@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
@@ -63,50 +64,89 @@ export default function HomePage() {
   }, [activeLocation, experiences]);
 
   return (
-    <div className="container mx-auto px-4 py-8 md:py-16">
+    <div className="container mx-auto px-4 pb-16 pt-10 sm:pt-12 lg:pt-16">
       {/* Hero Section */}
-      <section className="text-center mb-16 md:mb-24">
-        <div className="max-w-4xl mx-auto">
-          <Badge variant="primary" className="mb-6 animate-fade-in">
-            🚀 Now Live on Sepolia
-          </Badge>
-
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 animate-slide-up">
-            <span className="bg-gradient-to-r from-primary-600 via-primary-700 to-primary-800 bg-clip-text text-transparent">
-              Experience Protocol
-            </span>
-          </h1>
-
-          <p className="text-lg md:text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-2xl mx-auto leading-relaxed">
-            Token-gated access with soulbound NFT passes and automated revenue sharing. Build, launch,
-            and manage premium experiences without custodial risks or complex tooling.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
-            <Link href="/experience">
-              <Button size="lg" className="w-full sm:w-auto">
-                🔍 Explore Experiences
-              </Button>
-            </Link>
-            <Link href="/create">
-              <Button variant="secondary" size="lg" className="w-full sm:w-auto">
-                🎨 Create New Experience
-              </Button>
-            </Link>
+      <section className="relative mb-16 md:mb-24">
+        <div className="relative overflow-hidden rounded-3xl border border-primary-100/70 bg-white/80 px-6 py-12 shadow-sm backdrop-blur-xl dark:border-primary-900/30 dark:bg-slate-900/70 sm:px-10 lg:px-16">
+          <div className="pointer-events-none absolute inset-0 -z-10">
+            <div className="absolute -left-24 top-8 h-48 w-48 rounded-full bg-primary-200/40 blur-3xl dark:bg-primary-800/30" />
+            <div className="absolute bottom-0 right-0 h-64 w-64 translate-x-16 translate-y-16 rounded-full bg-primary-400/20 blur-3xl dark:bg-primary-900/40" />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-primary-600 mb-2">85%</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Creator Revenue</div>
+          <div className="flex flex-col items-center gap-10 text-center md:flex-row md:items-center md:text-left">
+            <div className="flex-1 space-y-6">
+              <Badge variant="primary" className="inline-flex items-center gap-2 text-xs uppercase tracking-wide">
+                <span className="animate-pulse">🚀</span>
+                Now live on Sepolia testnet
+              </Badge>
+
+              <div className="space-y-4">
+                <h1 className="text-4xl font-bold leading-tight text-gray-900 dark:text-white sm:text-5xl lg:text-6xl">
+                  Launch premium experiences with soulbound access passes
+                </h1>
+                <p className="text-base leading-relaxed text-gray-600 dark:text-gray-300 sm:text-lg">
+                  Experience Protocol gives creators instant ETH payouts, proposer revenue sharing, and a no-rug buyer journey—all in a mobile-first interface.
+                </p>
+              </div>
+
+              <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center">
+                <Link href="/experience" className="sm:w-auto">
+                  <Button size="lg" className="w-full">
+                    🔍 Explore experiences
+                  </Button>
+                </Link>
+                <Link href="/create" className="sm:w-auto">
+                  <Button variant="secondary" size="lg" className="w-full">
+                    🎨 Create new experience
+                  </Button>
+                </Link>
+              </div>
             </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-primary-600 mb-2">10%</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Proposer Reward</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-primary-600 mb-2">5%</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Platform Fee</div>
+
+            <div className="flex w-full flex-col gap-5 rounded-2xl border border-white/50 bg-white/70 p-6 shadow-lg backdrop-blur md:max-w-sm dark:border-white/10 dark:bg-slate-900/60">
+              <div className="flex items-center gap-3 rounded-2xl border border-primary-200/70 bg-primary-50/70 p-3 text-left dark:border-primary-800/50 dark:bg-primary-900/20">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/60 bg-white/80 shadow-sm dark:border-white/10 dark:bg-white/10">
+                  <Image
+                    src="/logo_ep.png"
+                    alt="Experience Protocol logo"
+                    width={40}
+                    height={40}
+                    className="h-10 w-10 object-contain"
+                    priority
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs uppercase tracking-wide text-primary-600 dark:text-primary-200">
+                    Creator framework
+                  </span>
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                    Soulbound minting, proposer rewards
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                <span>Profit split</span>
+                <span>Sepolia defaults</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {[
+                  { value: "85%", label: "Creator revenue" },
+                  { value: "10%", label: "Proposer reward" },
+                  { value: "5%", label: "Platform fee" },
+                ].map(({ value, label }) => (
+                  <div key={label} className="rounded-xl bg-primary-50/80 p-4 text-center dark:bg-primary-900/20">
+                    <div className="text-2xl font-semibold text-primary-700 dark:text-primary-200">
+                      {value}
+                    </div>
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                      {label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-xl bg-gray-100/80 p-4 text-sm leading-relaxed text-gray-700 dark:bg-slate-800/70 dark:text-gray-200">
+                Built-in support for wallet-based access control, mobile checkout, and proposer lifecycle management.
+              </div>
             </div>
           </div>
         </div>
@@ -115,39 +155,42 @@ export default function HomePage() {
       {/* Trending Experiences */}
       {!loading && trendingExperiences.length > 0 && (
         <section className="mb-16 md:mb-24">
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
-            <div>
-              <h2 className="text-3xl md:text-4xl font-bold">Trending now</h2>
-              <p className="text-lg text-gray-600 dark:text-gray-300">
-                Fresh experiences the community has deployed recently.
-              </p>
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
+            <div className="space-y-3">
+              <Badge variant="primary" size="sm" className="w-fit">
+                🔥 Hot right now
+              </Badge>
+              <div>
+                <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 md:text-4xl">Trending experiences</h2>
+                <p className="mt-2 text-base text-gray-600 dark:text-gray-300 md:text-lg">
+                  Fresh drops curated from the community registry.
+                </p>
+              </div>
             </div>
-            <Link href="/experience" className="self-start">
-              <Button variant="secondary" size="sm">
+            <Link href="/experience" className="md:self-end">
+              <Button variant="secondary" size="sm" className="w-full md:w-auto">
                 Browse all experiences
               </Button>
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="mt-8 flex snap-x snap-mandatory gap-5 overflow-x-auto pb-2 md:mt-10 md:grid md:grid-cols-3 md:gap-6 md:overflow-visible">
             {trendingExperiences.map((exp) => (
               <Card
                 key={exp.address}
-                className="flex h-full flex-col bg-white/70 backdrop-blur dark:bg-slate-900/60"
+                className="flex h-full min-w-[260px] flex-shrink-0 flex-col bg-white/80 shadow-md backdrop-blur md:min-w-0 dark:bg-slate-900/70"
               >
-                <div className="flex items-center justify-between text-sm text-primary-600 dark:text-primary-300">
-                  <span className="font-semibold">
-                    {exp.active ? "Active" : "Paused"}
-                  </span>
+                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-300">
+                  <span>{exp.active ? "Active" : "Paused"}</span>
                   <span>{Number(exp.priceEth).toFixed(3)} ETH</span>
                 </div>
-                <h3 className="mt-3 text-xl font-semibold text-gray-900 dark:text-white">
+                <h3 className="mt-4 text-xl font-semibold text-gray-900 dark:text-white">
                   {exp.name}
                 </h3>
-                <p className="mt-2 flex-1 text-sm text-gray-600 dark:text-gray-300 line-clamp-4">
+                <p className="mt-3 flex-1 text-sm leading-relaxed text-gray-600 line-clamp-3 dark:text-gray-300">
                   {exp.summary || "Access gated content and rewards."}
                 </p>
-                <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                <div className="mt-4 flex flex-wrap gap-2 text-xs text-gray-600 dark:text-gray-300">
                   {exp.location && (
                     <span className="rounded-full bg-primary-50 px-3 py-1 text-primary-700 dark:bg-primary-900/30 dark:text-primary-200">
                       {exp.location}
@@ -156,7 +199,7 @@ export default function HomePage() {
                   {exp.tags.slice(0, 3).map((tag) => (
                     <span
                       key={`${exp.address}-${tag}`}
-                      className="rounded-full bg-gray-100 px-3 py-1 text-gray-600 dark:bg-slate-800 dark:text-gray-200"
+                      className="rounded-full bg-gray-100 px-3 py-1 dark:bg-slate-800"
                     >
                       #{tag}
                     </span>
@@ -164,7 +207,7 @@ export default function HomePage() {
                 </div>
                 <Link
                   href={`/experience/${exp.address}/buy`}
-                  className="mt-6 inline-flex items-center justify-center rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-500"
+                  className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-500"
                 >
                   View & buy access
                 </Link>
@@ -177,21 +220,28 @@ export default function HomePage() {
       {/* Explore by location */}
       {!loading && locations.length > 0 && (
         <section className="mb-16 md:mb-24">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-            <div>
-              <h2 className="text-3xl md:text-4xl font-bold">Explore by location</h2>
-              <p className="text-lg text-gray-600 dark:text-gray-300">
-                Curated experiences organized by destination.
-              </p>
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-3">
+              <Badge variant="primary" size="sm" className="w-fit">
+                🌍 Location aware
+              </Badge>
+              <div>
+                <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 md:text-4xl">
+                  Explore by location
+                </h2>
+                <p className="mt-2 text-base text-gray-600 dark:text-gray-300 md:text-lg">
+                  Curated experiences organized by destination.
+                </p>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 md:mx-0 md:flex-wrap md:overflow-visible md:pb-0">
               {locations.map((location) => (
                 <Button
                   key={location}
                   variant={location === activeLocation ? "primary" : "secondary"}
                   size="sm"
                   onClick={() => setActiveLocation(location)}
-                  className="whitespace-nowrap"
+                  className="whitespace-nowrap rounded-full px-5"
                 >
                   {location}
                 </Button>
@@ -203,7 +253,7 @@ export default function HomePage() {
               {locationExperiences.map((exp) => (
                 <Card
                   key={`${exp.address}-location`}
-                  className="flex flex-col border border-white/10 bg-white/60 backdrop-blur dark:bg-slate-900/60"
+                  className="flex flex-col border border-white/20 bg-white/80 shadow-sm backdrop-blur dark:border-white/5 dark:bg-slate-900/70"
                 >
                   <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-300">
                     <span>{exp.active ? "Active" : "Paused"}</span>
@@ -284,7 +334,7 @@ export default function HomePage() {
 
       {/* Quick Start Section */}
       <section className="mb-16 md:mb-24">
-        <Card className="bg-white/70 backdrop-blur dark:bg-slate-900/60">
+        <Card className="bg-gradient-to-br from-white/95 via-primary-50/60 to-white/90 backdrop-blur dark:from-slate-900/80 dark:via-primary-900/20 dark:to-slate-900/70">
           <div className="grid gap-6 md:grid-cols-3">
             <div>
               <h2 className="text-xl font-semibold mb-2">Just getting started?</h2>
@@ -417,10 +467,27 @@ export default function HomePage() {
 
       {/* CTA Section */}
       <section className="text-center">
-        <Card className="bg-gradient-to-r from-primary-50 to-primary-100 dark:from-primary-900/20 dark:to-primary-800/20 border-primary-200 dark:border-primary-800">
-          <div className="max-w-2xl mx-auto">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to mint your first experience?</h2>
-            <p className="text-lg text-gray-600 dark:text-gray-300 mb-8">
+        <Card className="relative overflow-hidden border-primary-200 bg-gradient-to-br from-primary-50 via-white to-primary-100 shadow-xl dark:border-primary-800 dark:from-primary-900/40 dark:via-slate-900/60 dark:to-primary-800/30">
+          <div className="pointer-events-none absolute inset-0 -z-10 opacity-40">
+            <div className="absolute -top-20 right-0 h-56 w-56 rounded-full bg-primary-300 blur-3xl dark:bg-primary-800" />
+          </div>
+          <div className="max-w-2xl mx-auto space-y-6">
+            <div className="flex items-center justify-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/60 bg-white/80 shadow-sm dark:border-white/20 dark:bg-white/10">
+                <Image
+                  src="/logo_ep.png"
+                  alt="Experience Protocol logo"
+                  width={42}
+                  height={42}
+                  className="h-10 w-10 object-contain"
+                />
+              </div>
+              <span className="text-sm font-semibold uppercase tracking-[0.2em] text-primary-600 dark:text-primary-200">
+                Launch on-chain experiences
+              </span>
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold">Ready to mint your first experience?</h2>
+            <p className="text-lg text-gray-600 dark:text-gray-200">
               Connect a wallet, deploy a contract, and invite your community to participate.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -436,7 +503,7 @@ export default function HomePage() {
               </Link>
             </div>
             {!isConnected && (
-              <p className="mt-6 text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm text-gray-500 dark:text-gray-300">
                 You can explore without connecting, but buying or creating requires a wallet on Sepolia.
               </p>
             )}
