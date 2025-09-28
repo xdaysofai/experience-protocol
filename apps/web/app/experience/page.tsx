@@ -1,17 +1,9 @@
 "use client";
 import { useState, useEffect } from 'react';
+import { formatEther } from 'viem';
 import { getInjectedProvider } from '../../lib/provider';
 import { publicClient } from '../../lib/viemClient';
-
-// Known experiences - in production this could come from a subgraph or event logs
-const KNOWN_EXPERIENCES = [
-  {
-    address: '0x9585A7C5B664c6575cda710173B8d662E8EA0B87',
-    name: 'Demo Experience',
-    description: 'A demonstration of the ETH-only Experience Protocol'
-  }
-  // Add more experiences here as they're deployed
-];
+import { fetchDiscoverExperiences, DiscoverExperience } from '../../lib/publicExperiences';
 
 const experienceAbi = [
   { "type": "function", "name": "balanceOf", "inputs": [{"type": "address"}, {"type": "uint256"}], "outputs": [{"type": "uint256"}], "stateMutability": "view" },
@@ -28,6 +20,9 @@ interface OwnedExperience {
   cid: string;
   price: bigint;
   owner: string;
+  active: boolean;
+  location?: string;
+  tags: string[];
 }
 
 export default function ExperienceDashboard() {
@@ -35,17 +30,19 @@ export default function ExperienceDashboard() {
   const [loading, setLoading] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [ownedExperiences, setOwnedExperiences] = useState<OwnedExperience[]>([]);
+  const [allExperiences, setAllExperiences] = useState<DiscoverExperience[]>([]);
   const [isWrongNetwork, setIsWrongNetwork] = useState<boolean>(false);
 
   useEffect(() => {
     checkWalletConnection();
+    loadAllExperiences();
   }, []);
 
   useEffect(() => {
-    if (account) {
+    if (account && allExperiences.length > 0) {
       loadOwnedExperiences();
     }
-  }, [account]);
+  }, [account, allExperiences]);
 
   async function checkWalletConnection() {
     try {
@@ -121,57 +118,61 @@ export default function ExperienceDashboard() {
     }
   }
 
+  async function loadAllExperiences() {
+    try {
+      setLoading('Loading all experiences...');
+      console.log('🔍 Fetching all experiences from on-chain...');
+      
+      const experiences = await fetchDiscoverExperiences(50); // Get up to 50 experiences
+      console.log(`✅ Found ${experiences.length} experiences on-chain`);
+      
+      setAllExperiences(experiences);
+    } catch (err) {
+      console.error('Failed to load all experiences:', err);
+      setError('Failed to load experiences from blockchain');
+    } finally {
+      setLoading('');
+    }
+  }
+
   async function loadOwnedExperiences() {
-    if (!account) return;
+    if (!account || allExperiences.length === 0) return;
     
-    setLoading('Loading experiences...');
+    setLoading('Checking your pass balances...');
     const owned: OwnedExperience[] = [];
     
     try {
-      for (const exp of KNOWN_EXPERIENCES) {
+      for (const exp of allExperiences) {
         try {
-          const [passBalance, cid, price, owner] = await Promise.all([
-            publicClient.readContract({
-              address: exp.address as `0x${string}`,
-              abi: experienceAbi,
-              functionName: 'balanceOf',
-              args: [account as `0x${string}`, 1n],
-            }),
-            publicClient.readContract({
-              address: exp.address as `0x${string}`,
-              abi: experienceAbi,
-              functionName: 'cid',
-            }),
-            publicClient.readContract({
-              address: exp.address as `0x${string}`,
-              abi: experienceAbi,
-              functionName: 'priceEthWei',
-            }),
-            publicClient.readContract({
-              address: exp.address as `0x${string}`,
-              abi: experienceAbi,
-              functionName: 'owner',
-            }),
-          ]);
+          const passBalance = await publicClient.readContract({
+            address: exp.address,
+            abi: experienceAbi,
+            functionName: 'balanceOf',
+            args: [account as `0x${string}`, 1n],
+          });
 
           owned.push({
             address: exp.address,
             name: exp.name,
-            description: exp.description,
+            description: exp.summary || 'A token-gated experience',
             passBalance: passBalance as bigint,
-            cid: cid as string,
-            price: price as bigint,
-            owner: owner as string,
+            cid: exp.cid,
+            price: BigInt(parseFloat(exp.priceEth) * 1e18), // Convert ETH to wei
+            owner: exp.owner,
+            active: exp.active,
+            location: exp.location,
+            tags: exp.tags,
           });
         } catch (err) {
-          console.error(`Failed to load experience ${exp.address}:`, err);
+          console.error(`Failed to load pass balance for ${exp.address}:`, err);
         }
       }
       
+      console.log(`✅ Loaded ${owned.length} experiences with pass balances`);
       setOwnedExperiences(owned);
     } catch (err) {
-      console.error('Failed to load experiences:', err);
-      setError('Failed to load experiences');
+      console.error('Failed to load pass balances:', err);
+      setError('Failed to check pass balances');
     } finally {
       setLoading('');
     }
@@ -404,7 +405,7 @@ export default function ExperienceDashboard() {
                 textAlign: 'center'
               }}>
                 <div style={{ fontSize: '32px', fontWeight: '600', color: '#f59e0b', marginBottom: '8px' }}>
-                  {KNOWN_EXPERIENCES.length}
+                  {allExperiences.length}
                 </div>
                 <div style={{ color: '#6b7280', fontSize: '14px' }}>Available Experiences</div>
               </div>
@@ -435,9 +436,40 @@ export default function ExperienceDashboard() {
                       <h3 style={{ margin: '0 0 8px 0', color: '#1e293b', fontSize: '18px' }}>
                         {exp.name}
                       </h3>
-                      <p style={{ margin: '0', color: '#64748b', fontSize: '14px' }}>
+                      <p style={{ margin: '0 0 8px 0', color: '#64748b', fontSize: '14px' }}>
                         {exp.description}
                       </p>
+                      {(exp.location || exp.tags.length > 0) && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
+                          {exp.location && (
+                            <span style={{
+                              backgroundColor: '#3b82f6',
+                              color: 'white',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: '500'
+                            }}>
+                              📍 {exp.location}
+                            </span>
+                          )}
+                          {exp.tags.slice(0, 2).map((tag) => (
+                            <span
+                              key={`${exp.address}-${tag}`}
+                              style={{
+                                backgroundColor: '#f3f4f6',
+                                color: '#374151',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontSize: '11px',
+                                fontWeight: '500'
+                              }}
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     {exp.passBalance > 0 && (
                       <div style={{
@@ -558,7 +590,7 @@ export default function ExperienceDashboard() {
               ))}
             </div>
 
-            {ownedExperiences.length === 0 && (
+            {ownedExperiences.length === 0 && allExperiences.length > 0 && (
               <div style={{ 
                 textAlign: 'center', 
                 padding: '60px 20px',
@@ -567,23 +599,55 @@ export default function ExperienceDashboard() {
                 boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
               }}>
                 <div style={{ fontSize: '64px', marginBottom: '20px' }}>🎯</div>
-                <h2 style={{ margin: '0 0 12px 0', color: '#1e293b' }}>No Experiences Found</h2>
+                <h2 style={{ margin: '0 0 12px 0', color: '#1e293b' }}>No Passes Owned Yet</h2>
                 <p style={{ margin: '0 0 20px 0', color: '#64748b' }}>
-                  Start exploring and purchasing experience passes to build your collection
+                  You haven't purchased any experience passes yet. Browse the experiences above to get started!
+                </p>
+                {allExperiences.length > 0 && (
+                  <a 
+                    href={`/experience/${allExperiences[0].address}/buy`}
+                    style={{
+                      display: 'inline-block',
+                      padding: '12px 24px',
+                      backgroundColor: '#3b82f6',
+                      color: 'white',
+                      textDecoration: 'none',
+                      borderRadius: '8px',
+                      fontWeight: '600'
+                    }}
+                  >
+                    🛒 Buy Your First Pass
+                  </a>
+                )}
+              </div>
+            )}
+            
+            {allExperiences.length === 0 && !loading && (
+              <div style={{ 
+                textAlign: 'center', 
+                padding: '60px 20px',
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+              }}>
+                <div style={{ fontSize: '64px', marginBottom: '20px' }}>🌱</div>
+                <h2 style={{ margin: '0 0 12px 0', color: '#1e293b' }}>No Experiences Available</h2>
+                <p style={{ margin: '0 0 20px 0', color: '#64748b' }}>
+                  No experience contracts have been deployed yet. Be the first to create one!
                 </p>
                 <a 
-                  href="/experience/0x9585A7C5B664c6575cda710173B8d662E8EA0B87/buy"
+                  href="/create"
                   style={{
                     display: 'inline-block',
                     padding: '12px 24px',
-                    backgroundColor: '#3b82f6',
+                    backgroundColor: '#10b981',
                     color: 'white',
                     textDecoration: 'none',
                     borderRadius: '8px',
                     fontWeight: '600'
                   }}
                 >
-                  🛒 Buy Your First Pass
+                  🎨 Create First Experience
                 </a>
               </div>
             )}
