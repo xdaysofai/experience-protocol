@@ -1,5 +1,22 @@
-import { verifySelfIdentity } from '@xp/sdk';
 import { publicClient } from './viemClient';
+
+// Mock Self verifier for MVP
+interface IdentityResult {
+  eligible: boolean;
+  address?: string;
+  reason?: string;
+}
+
+async function verifySelfIdentity(address: string): Promise<IdentityResult> {
+  // Mock implementation - always returns eligible for MVP
+  console.log('Mock Self identity verification for:', address);
+  
+  return {
+    eligible: true,
+    address,
+    reason: 'Mock verification - always eligible in development'
+  };
+}
 
 export interface AddressIdentity {
   address: `0x${string}`;
