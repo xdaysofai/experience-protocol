@@ -108,27 +108,95 @@ async function fetchFromFactoryEvents(limit: number): Promise<DiscoverExperience
 
   try {
     console.log('Fetching experiences from factory events...');
-    
+
     // Factory ABI for ExperienceCreated event
     const factoryAbi = [
       {
         "type": "event",
         "name": "ExperienceCreated",
         "inputs": [
-          {"name": "experience", "type": "address", "indexed": true},
-          {"name": "creator", "type": "address", "indexed": true},
-          {"name": "cid", "type": "string", "indexed": false}
+          { "name": "creator", "type": "address", "indexed": true },
+          { "name": "experience", "type": "address", "indexed": false },
+          { "name": "cidInitial", "type": "string", "indexed": false },
+          { "name": "flowSyncAuthority", "type": "address", "indexed": false },
+          { "name": "proposerFeeBps", "type": "uint16", "indexed": false }
         ]
       }
     ] as const;
 
-    // Get ExperienceCreated events
-    const logs = await publicClient.getLogs({
-      address: factoryAddress,
-      event: factoryAbi[0],
-      fromBlock: 'earliest',
-      toBlock: 'latest'
-    });
+    const CHUNK_SIZE = 50_000n;
+    const SAFETY_MULTIPLIER = 3;
+    const BATCH_SIZE = 5;
+    const INITIAL_LOOKBACK = 250_000n;
+    const MAX_LOOKBACK_BLOCKS = 1_000_000n;
+
+    type FactoryLog = Awaited<ReturnType<typeof publicClient.getLogs>> extends Array<infer Item>
+      ? Item
+      : never;
+
+    const latestBlock = await publicClient.getBlockNumber();
+    const logs: FactoryLog[] = [];
+    const desiredLogCount = Math.max(limit * SAFETY_MULTIPLIER, limit + 4);
+
+    const windows: Array<{ fromBlock: bigint; toBlock: bigint }> = [];
+    let cursor: bigint = latestBlock;
+    let lookback: bigint = INITIAL_LOOKBACK;
+
+    const pushWindows = (targetMinBlock: bigint) => {
+      if (cursor < targetMinBlock) {
+        return;
+      }
+
+      while (cursor >= targetMinBlock) {
+        const rawFrom = cursor >= CHUNK_SIZE ? cursor - CHUNK_SIZE + 1n : 0n;
+        const fromBlock = rawFrom >= targetMinBlock ? rawFrom : targetMinBlock;
+        windows.push({ fromBlock, toBlock: cursor });
+
+        if (fromBlock === targetMinBlock) {
+          cursor = fromBlock > 0n ? fromBlock - 1n : -1n;
+          break;
+        }
+
+        cursor = fromBlock - 1n;
+      }
+    };
+
+    const initialMinBlock = latestBlock > lookback ? latestBlock - lookback : 0n;
+    pushWindows(initialMinBlock);
+
+    for (let i = 0; i < windows.length && logs.length < desiredLogCount; i += BATCH_SIZE) {
+      const batch = windows.slice(i, i + BATCH_SIZE);
+      const results = await Promise.all(
+        batch.map(async ({ fromBlock, toBlock }) => {
+          try {
+            return await publicClient.getLogs({
+              address: factoryAddress,
+              event: factoryAbi[0],
+              fromBlock,
+              toBlock,
+            });
+          } catch (err) {
+            console.warn('Factory events chunk failed', { fromBlock: fromBlock.toString(), toBlock: toBlock.toString(), err });
+            return [] as FactoryLog[];
+          }
+        })
+      );
+
+      for (const chunk of results) {
+        if (chunk.length > 0) {
+          logs.unshift(...chunk);
+        }
+      }
+
+      if (i + BATCH_SIZE >= windows.length && logs.length < desiredLogCount && lookback < MAX_LOOKBACK_BLOCKS && cursor >= 0n) {
+        lookback = lookback * 2n;
+        if (lookback > MAX_LOOKBACK_BLOCKS) {
+          lookback = MAX_LOOKBACK_BLOCKS;
+        }
+        const nextMinBlock = latestBlock > lookback ? latestBlock - lookback : 0n;
+        pushWindows(nextMinBlock);
+      }
+    }
 
     console.log(`Found ${logs.length} experience creation events`);
 

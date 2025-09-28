@@ -18,9 +18,11 @@ const factoryAbi = [
     "type": "event",
     "name": "ExperienceCreated",
     "inputs": [
-      {"name": "experience", "type": "address", "indexed": true},
-      {"name": "creator", "type": "address", "indexed": true},
-      {"name": "cid", "type": "string", "indexed": false}
+      { "name": "creator", "type": "address", "indexed": true },
+      { "name": "experience", "type": "address", "indexed": false },
+      { "name": "cidInitial", "type": "string", "indexed": false },
+      { "name": "flowSyncAuthority", "type": "address", "indexed": false },
+      { "name": "proposerFeeBps", "type": "uint16", "indexed": false }
     ]
   }
 ] as const;

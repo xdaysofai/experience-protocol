@@ -25,7 +25,9 @@ const factoryAbi = [
     "inputs": [
       { "name": "creator", "type": "address", "indexed": true },
       { "name": "experience", "type": "address", "indexed": false },
-      { "name": "cidInitial", "type": "string", "indexed": false }
+      { "name": "cidInitial", "type": "string", "indexed": false },
+      { "name": "flowSyncAuthority", "type": "address", "indexed": false },
+      { "name": "proposerFeeBps", "type": "uint16", "indexed": false }
     ]
   }
 ] as const;
