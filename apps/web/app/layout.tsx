@@ -38,13 +38,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
-                      <div className="relative h-9 w-9 overflow-hidden rounded-xl border border-white/50 bg-white/80 shadow-sm dark:border-white/10 dark:bg-white/10">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/50 bg-white/80 shadow-sm dark:border-white/10 dark:bg-white/10">
                         <Image
                           src="/logo_ep.png"
                           alt="Experience Protocol logo"
-                          fill
-                          sizes="36px"
-                          className="object-contain p-2"
+                          width={30}
+                          height={30}
+                          className="h-7 w-7 object-contain"
                         />
                       </div>
                       <span className="text-base font-semibold text-gray-900 dark:text-gray-100">
