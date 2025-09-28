@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import WalletButton from "./WalletButton";
@@ -64,8 +65,15 @@ export default function SiteHeader() {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between gap-4 py-3 md:py-4">
           <Link href="/" className="flex items-center gap-3" aria-label="Experience Protocol home">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 shadow-sm">
-              <span className="text-base font-bold text-white">XP</span>
+            <div className="relative h-10 w-10 overflow-hidden rounded-2xl border border-white/40 bg-white/80 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10">
+              <Image
+                src="/logo_ep.png"
+                alt="Experience Protocol logo"
+                fill
+                sizes="40px"
+                className="object-contain p-1.5"
+                priority
+              />
             </div>
             <div className="flex flex-col">
               <span className="text-lg font-semibold tracking-tight text-gray-900 dark:text-gray-100">
@@ -127,7 +135,22 @@ export default function SiteHeader() {
       >
         <div className="border-t border-gray-200/80 bg-white/95 backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/95">
           <div className="container mx-auto px-4">
-            <nav className="flex flex-col gap-1 py-4">
+            <div className="flex items-center gap-3 py-4">
+              <div className="relative h-10 w-10 overflow-hidden rounded-2xl border border-white/40 bg-white/60 shadow-sm dark:border-white/10 dark:bg-white/5">
+                <Image
+                  src="/logo_ep.png"
+                  alt="Experience Protocol logo"
+                  fill
+                  sizes="40px"
+                  className="object-contain p-1.5"
+                />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Experience Protocol</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Comprehensive access tooling</span>
+              </div>
+            </div>
+            <nav className="flex flex-col gap-1 py-2">
               {NAV_LINKS.map((link) => {
                 const isActive =
                   link.href === "/" ? pathname === "/" : pathname?.startsWith(link.href);

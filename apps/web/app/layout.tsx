@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import Image from 'next/image';
 import { WalletProvider } from '../contexts/WalletContext';
 import SiteHeader from '../components/SiteHeader';
 
@@ -37,8 +38,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-700">
-                        <span className="text-xs font-bold text-white">XP</span>
+                      <div className="relative h-9 w-9 overflow-hidden rounded-xl border border-white/50 bg-white/80 shadow-sm dark:border-white/10 dark:bg-white/10">
+                        <Image
+                          src="/logo_ep.png"
+                          alt="Experience Protocol logo"
+                          fill
+                          sizes="36px"
+                          className="object-contain p-2"
+                        />
                       </div>
                       <span className="text-base font-semibold text-gray-900 dark:text-gray-100">
                         Experience Protocol
@@ -73,14 +80,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
 
                 <div className="mt-10 flex flex-col gap-4 border-t border-gray-200 pt-6 text-sm text-gray-500 dark:border-slate-700 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between">
-                  <p>© 2024 Experience Protocol. Built with ❤️ for on-chain communities.</p>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <span>Powered by</span>
-                    <span className="font-medium text-gray-600 dark:text-gray-300">Ethereum Sepolia</span>
-                    <span className="text-gray-400">•</span>
-                    <span className="font-medium text-gray-600 dark:text-gray-300">Viem</span>
-                    <span className="text-gray-400">•</span>
-                    <span className="font-medium text-gray-600 dark:text-gray-300">Next.js</span>
+                  <p>© 2025 Experience Protocol. Built with ❤️ for on-chain communities.</p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-gray-500 dark:text-gray-400">
+                    <span>Made for creators, contributors, and their collectives.</span>
                   </div>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
@@ -102,7 +103,27 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="flex w-full flex-col gap-4 rounded-2xl border border-white/50 bg-white/70 p-6 shadow-sm backdrop-blur md:max-w-sm dark:border-white/10 dark:bg-slate-900/60">
+            <div className="flex w-full flex-col gap-5 rounded-2xl border border-white/50 bg-white/70 p-6 shadow-lg backdrop-blur md:max-w-sm dark:border-white/10 dark:bg-slate-900/60">
+              <div className="flex items-center gap-3 rounded-2xl border border-primary-200/70 bg-primary-50/70 p-3 text-left dark:border-primary-800/50 dark:bg-primary-900/20">
+                <div className="relative h-12 w-12 overflow-hidden rounded-xl border border-white/60 bg-white/80 shadow-sm dark:border-white/10 dark:bg-white/10">
+                  <Image
+                    src="/logo_ep.png"
+                    alt="Experience Protocol logo"
+                    fill
+                    sizes="48px"
+                    className="object-contain p-2"
+                    priority
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs uppercase tracking-wide text-primary-600 dark:text-primary-200">
+                    Creator framework
+                  </span>
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                    Soulbound minting, proposer rewards
+                  </span>
+                </div>
+              </div>
               <div className="flex items-center justify-between text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 <span>Profit split</span>
                 <span>Sepolia defaults</span>
@@ -313,7 +334,7 @@ export default function HomePage() {
 
       {/* Quick Start Section */}
       <section className="mb-16 md:mb-24">
-        <Card className="bg-white/70 backdrop-blur dark:bg-slate-900/60">
+        <Card className="bg-gradient-to-br from-white/95 via-primary-50/60 to-white/90 backdrop-blur dark:from-slate-900/80 dark:via-primary-900/20 dark:to-slate-900/70">
           <div className="grid gap-6 md:grid-cols-3">
             <div>
               <h2 className="text-xl font-semibold mb-2">Just getting started?</h2>
@@ -446,10 +467,27 @@ export default function HomePage() {
 
       {/* CTA Section */}
       <section className="text-center">
-        <Card className="bg-gradient-to-r from-primary-50 to-primary-100 dark:from-primary-900/20 dark:to-primary-800/20 border-primary-200 dark:border-primary-800">
-          <div className="max-w-2xl mx-auto">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to mint your first experience?</h2>
-            <p className="text-lg text-gray-600 dark:text-gray-300 mb-8">
+        <Card className="relative overflow-hidden border-primary-200 bg-gradient-to-br from-primary-50 via-white to-primary-100 shadow-xl dark:border-primary-800 dark:from-primary-900/40 dark:via-slate-900/60 dark:to-primary-800/30">
+          <div className="pointer-events-none absolute inset-0 -z-10 opacity-40">
+            <div className="absolute -top-20 right-0 h-56 w-56 rounded-full bg-primary-300 blur-3xl dark:bg-primary-800" />
+          </div>
+          <div className="max-w-2xl mx-auto space-y-6">
+            <div className="flex items-center justify-center gap-3">
+              <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-white/60 bg-white/80 shadow-sm dark:border-white/20 dark:bg-white/10">
+                <Image
+                  src="/logo_ep.png"
+                  alt="Experience Protocol logo"
+                  fill
+                  sizes="48px"
+                  className="object-contain p-2"
+                />
+              </div>
+              <span className="text-sm font-semibold uppercase tracking-[0.2em] text-primary-600 dark:text-primary-200">
+                Launch on-chain experiences
+              </span>
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold">Ready to mint your first experience?</h2>
+            <p className="text-lg text-gray-600 dark:text-gray-200">
               Connect a wallet, deploy a contract, and invite your community to participate.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -465,7 +503,7 @@ export default function HomePage() {
               </Link>
             </div>
             {!isConnected && (
-              <p className="mt-6 text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm text-gray-500 dark:text-gray-300">
                 You can explore without connecting, but buying or creating requires a wallet on Sepolia.
               </p>
             )}
