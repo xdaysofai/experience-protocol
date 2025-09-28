@@ -65,13 +65,13 @@ export default function SiteHeader() {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between gap-4 py-3 md:py-4">
           <Link href="/" className="flex items-center gap-3" aria-label="Experience Protocol home">
-            <div className="relative h-10 w-10 overflow-hidden rounded-2xl border border-white/40 bg-white/80 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/40 bg-white/80 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/10">
               <Image
                 src="/logo_ep.png"
                 alt="Experience Protocol logo"
-                fill
-                sizes="40px"
-                className="object-contain p-1.5"
+                width={32}
+                height={32}
+                className="h-8 w-8 object-contain"
                 priority
               />
             </div>
@@ -136,13 +136,13 @@ export default function SiteHeader() {
         <div className="border-t border-gray-200/80 bg-white/95 backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/95">
           <div className="container mx-auto px-4">
             <div className="flex items-center gap-3 py-4">
-              <div className="relative h-10 w-10 overflow-hidden rounded-2xl border border-white/40 bg-white/60 shadow-sm dark:border-white/10 dark:bg-white/5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/40 bg-white/60 shadow-sm dark:border-white/10 dark:bg-white/5">
                 <Image
                   src="/logo_ep.png"
                   alt="Experience Protocol logo"
-                  fill
-                  sizes="40px"
-                  className="object-contain p-1.5"
+                  width={32}
+                  height={32}
+                  className="h-8 w-8 object-contain"
                 />
               </div>
               <div className="flex flex-col">

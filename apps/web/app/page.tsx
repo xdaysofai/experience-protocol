@@ -105,13 +105,13 @@ export default function HomePage() {
 
             <div className="flex w-full flex-col gap-5 rounded-2xl border border-white/50 bg-white/70 p-6 shadow-lg backdrop-blur md:max-w-sm dark:border-white/10 dark:bg-slate-900/60">
               <div className="flex items-center gap-3 rounded-2xl border border-primary-200/70 bg-primary-50/70 p-3 text-left dark:border-primary-800/50 dark:bg-primary-900/20">
-                <div className="relative h-12 w-12 overflow-hidden rounded-xl border border-white/60 bg-white/80 shadow-sm dark:border-white/10 dark:bg-white/10">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/60 bg-white/80 shadow-sm dark:border-white/10 dark:bg-white/10">
                   <Image
                     src="/logo_ep.png"
                     alt="Experience Protocol logo"
-                    fill
-                    sizes="48px"
-                    className="object-contain p-2"
+                    width={40}
+                    height={40}
+                    className="h-10 w-10 object-contain"
                     priority
                   />
                 </div>
@@ -473,13 +473,13 @@ export default function HomePage() {
           </div>
           <div className="max-w-2xl mx-auto space-y-6">
             <div className="flex items-center justify-center gap-3">
-              <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-white/60 bg-white/80 shadow-sm dark:border-white/20 dark:bg-white/10">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/60 bg-white/80 shadow-sm dark:border-white/20 dark:bg-white/10">
                 <Image
                   src="/logo_ep.png"
                   alt="Experience Protocol logo"
-                  fill
-                  sizes="48px"
-                  className="object-contain p-2"
+                  width={42}
+                  height={42}
+                  className="h-10 w-10 object-contain"
                 />
               </div>
               <span className="text-sm font-semibold uppercase tracking-[0.2em] text-primary-600 dark:text-primary-200">
