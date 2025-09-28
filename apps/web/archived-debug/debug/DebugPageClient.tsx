@@ -16,7 +16,7 @@ interface ExperienceResult {
   error?: string;
 }
 
-export default function DebugPage() {
+export default function DebugPageClient() {
   const { account, isConnected } = useWallet();
   const [results, setResults] = useState<ExperienceResult[]>([]);
   const [loading, setLoading] = useState<boolean>(false);

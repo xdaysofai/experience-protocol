@@ -2,7 +2,7 @@
 import { useWallet } from '../../contexts/WalletContext';
 import { useState, useEffect } from 'react';
 
-export default function WalletTest() {
+export default function WalletTestClient() {
   const { account, wallet, isConnected, isWrongNetwork, loading, error, connectWallet, disconnectWallet } = useWallet();
   const [logs, setLogs] = useState<string[]>([]);
 
